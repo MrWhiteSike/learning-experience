@@ -1,0 +1,21 @@
+Spark 核心模块
+
+Spark Core 基础核心
+提供了Spark最基础与最核心的功能，下面四种功能模块都是在core基础上进行扩展的。
+
+Spark SQL 结构化操作
+是Spark用来操作结构化数据的组件，用户可以使用SQL或者Hive 版本的SQL方言（HQL）来查询数据。
+
+Spark Streaming 流式操作
+是Spark平台上针对实时数据进行流式计算的组件，提供了丰富的处理数据流的API。
+
+
+Spark ML 机器学习
+是Spark提供的一个机器学习算法库，不仅提供了模型评估、数据导入等额外的功能，还提供了一些更底层的机器学习原语。
+
+Spark GraphX 图
+是Spark面向图计算提供的框架与算法库。
+
+
+
+

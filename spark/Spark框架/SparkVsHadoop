@@ -1,0 +1,15 @@
+SparkVsHadoop
+
+1、Spark 和 Hadoop的根本差别是多个作业之间的数据通信问题：
+spark 多个作业之间数据通信是基于内存的，而Hadoop是基于磁盘
+
+2、Spark Task启动时间快，Spark采用fork线程方式，而Hadoop采用创建进程的方式
+
+3、spark只有在shuffle的时候将数据写入磁盘，而Hadoop中多个MR作业之间的数据交互都要依赖于磁盘交互
+
+4、spark缓存机制比HDFS缓存机制高效
+
+spark是基于内存的，所以在实际的生产环境中，由于内存的限制，可能会由于内存资源不够导致job执行失败，此时MapReduce其实是一个更好的选择，所以Spark并不能完全替代MR。
+
+
+
