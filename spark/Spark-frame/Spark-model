@@ -1,0 +1,64 @@
+Spark运行架构
+
+Spark框架的核心是一个计算引擎，整体来说，采用了标准master-slave结构。
+Driver表示master，负责管理整个集群中作业任务调度。
+Executor则是slave，负责实际执行任务。
+
+Driver & Executor 是计算相关的组件。
+
+Master & Worker 是资源相关的组件。
+
+Master 类似于Yarn环境中的ResourceManager，Worker类似于Yarn环境中的NoteManager
+
+
+Driver 和 Master怎么通信？
+
+为了降低耦合，增加一层ApplicationMaster
+
+Driver 向ApplicationMaster 申请资源，ApplicationMaster向Master申请
+
+
+核心概念
+
+Executor是集群中运行在工作节点中的一个JVM进程，是整个集群中的专门用于计算的节点。在提交过程中，可以提供参数指定计算节点的个数，以及对应的资源。资源一般指的是工作节点Executor的内存大小和使用的虚拟CPU核 Core 数。
+
+应用程序相关启动参数：
+--num-executors ：配置Executor的数量
+--executor-memory ：配置每个Executor的内存大小
+--executor-cores ：配置每个Executor的虚拟CPU core数量
+
+并行度 Parallelism
+在分布式计算框架中一般都是多个任务同时执行，由于任务分布在不同的计算节点进行计算，所以能够真正实现多任务并行执行。
+将整个集群并行执行任务的数量称之为并行度。可动态修改配置
+
+DAG 有向无环图
+
+其实就是任务的调度
+
+
+提交流程：有两条线
+1、资源的申请，创建Executor
+2、计算的准备
+
+计算发给资源就可以执行了
+
+
+Spark应用程序提交到yarn环境中执行的时候，一般会有种部署执行的方式：Client和Cluster。两种模式主要区别是：Driver程序的运行节点位置。
+
+Yarn Client模式：
+Client模式用于监控和调度的Driver模块在客户端执行，而不是在Yarn中，一般用于测试
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
