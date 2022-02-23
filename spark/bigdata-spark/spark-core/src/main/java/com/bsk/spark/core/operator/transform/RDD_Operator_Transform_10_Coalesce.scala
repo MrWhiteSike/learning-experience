@@ -2,23 +2,20 @@ package com.bsk.spark.core.operator.transform
 
 import org.apache.spark.{SparkConf, SparkContext}
 
-object RDD_Operator_Transform_09_Distinct {
+object RDD_Operator_Transform_10_Coalesce {
 
   def main(args: Array[String]): Unit = {
     val sc = new SparkContext(new SparkConf().setMaster("local[*]").setAppName("Operator"))
     val rdd = sc.makeRDD(
-      List(1, 2, 3, 4, 2, 3, 1),2
+      List(1, 2, 3, 4, 5, 6),3
     )
-    // 参数为none时 distinct底层逻辑:  map(x => (x, null)).reduceByKey((x, _) => x, numPartitions).map(_._1)
-    // map：（1，null）（2，null）（3，null）（4，null）（1，null）（2，null）（3，null）
-    // reduceByKey:（1，null）（1，null）=> (null, null) => (null,null),null => (null,null) => (1,(null,null))
-    // map: （1，null）=> 1
-    // 使用分布式处理方式实现去重
-    val distinctRDD = rdd.distinct()
-    distinctRDD.collect().foreach(println)
 
-    // 内存集合distinct的去重方式使用 HashSet 去重
-    List(1,1,2,2).distinct
+    // coalesce方法默认情况下不会将分区数据打乱重新组合
+    // 这种情况下的缩减分区可能会导致数据不均衡，出现数据倾斜
+    // 如果想要让数据均衡，可以进行shuffle处理，添加第二个参数为true就可以了
+//    val coaRDD = rdd.coalesce(2)
+    val coaRDD = rdd.coalesce(2, true)
+    coaRDD.saveAsTextFile("output1")
 
     sc.stop()
   }

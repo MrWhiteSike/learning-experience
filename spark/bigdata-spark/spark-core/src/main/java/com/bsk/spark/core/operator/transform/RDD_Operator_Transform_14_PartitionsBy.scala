@@ -1,19 +1,24 @@
 package com.bsk.spark.core.operator.transform
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.{HashPartitioner, SparkConf, SparkContext}
 
-object RDD_Operator_Transform_13_DoubleValue1 {
+object RDD_Operator_Transform_14_PartitionsBy {
 
   def main(args: Array[String]): Unit = {
     val sc = new SparkContext(new SparkConf().setMaster("local[*]").setAppName("Operator"))
-    val rdd1 = sc.makeRDD(List(1,2,3,4,5,6), 2)
-    val rdd2 = sc.makeRDD(List(3,4,5,6),2)
+    val rdd = sc.makeRDD(List(1,2,3,4),2)
 
-    // 分区数量不一致，报错信息：Can't zip RDDs with unequal numbers of partitions: List(4, 2)
-    // 每个分区中数据数量不一致，报错信息：Can only zip RDDs with same number of elements in each partition
-    val newRDD = rdd1.zip(rdd2)
+    val newRDD:RDD[(Int, Int)] = rdd.map((_, 1))
 
-    println(newRDD.collect().mkString(","))
+    // RDD =>> PairRDDFunctions
+    // 隐式转换（二次编译）: RDD 调用了伴生对象中的隐式转换方法：implicit def rddToPairRDDFunctions 进行转换的。
+
+    // partitionBy 根据指定的分区规则对数据进行重分区
+    newRDD.partitionBy(new HashPartitioner(2))
+      .saveAsTextFile("output")
+
+
     sc.stop()
   }
 

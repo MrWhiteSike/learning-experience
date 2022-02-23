@@ -1,0 +1,29 @@
+Intellij IDEA 常用快捷键：
+
+command + C : copy
+command + V : paste
+command + D : 复制当前行到下一行
+command + F : find
+command + R : replace
+command + S : save 
+command + A : all select
+command + Z : back step
+shift + command + u : 字母大写小写互变换
+command + / : 添加行注释
+option + command + / : 添加块注释
+⌘P : 显示方法的参数信息
+
+ctrl + space : 代码提示
+ctrl + shift + space : 智能提示
+option + shift + 下 : 向下移动选中行
+option + shift + 上 : 向上移动选中行
+
+option + shift + command + 左 : 向左移动选中元素
+option + shift + command + 右 : 向右移动选中元素
+
+command + N / ctrl + enter: 创建构造函数、getter/setter方法
+
+shift + command + enter : 完成当前状态
+
+ctrl + H : 可以快速查看抽象类的实现类
+shift + enter : 鼠标所在行插入新行
