@@ -20,6 +20,8 @@ RDD，Resilient Distributed Dataset
 在Driver中把RDD分解成不同的Task发给Executor去执行计算。
 
 
+################### IO模型类比RDD ###################
+
 IO模型中：
 字节流：提升性能的方式是：添加一个缓冲区buffer，当数据达到阈值时，才会输出到下游。
 字符流：一行一行读，需要用到字节流转字符流的转换流InputStreamReader/OutputStreamWriter
@@ -39,8 +41,6 @@ RDD与IO流的异同：
 RDD的数据处理方式类似于IO流，也有装饰者设计模式。
 RDD的数据只有在调用collect方法时，才会真正执行业务逻辑操作，之前的封装全部都是功能的扩展。
 RDD是不保存数据的，但是IO可以临时保存一部分数据。
-
-
 
 
 分布式：数据存储在大数据集群不同节点上
@@ -72,6 +72,7 @@ getPreferredLocations
 移动数据不如移动计算。
 
 
+################### 执行原理 ###################
 
 执行原理
 从计算角度来讲，数据处理过程需要计算资源（内存 & CPU）和计算模型（逻辑）。执行时，需要将计算资源和计算模型进行协调和整合。
@@ -83,6 +84,8 @@ RDD是Spark框架中用于数据处理的核心模型。在Yarn环境中，RDD�
 
 RDD在整个流程中主要用于将逻辑进行封装，并生成Task发送给Executor节点执行计算。
 
+
+################### RDD 创建方式 ###################
 
 RDD创建：
 1、从集合（内存）中创建
@@ -144,6 +147,8 @@ textFile : 可以将文件作为数据处理的数据源，默认也可以设定
  如果数据源为多个文件，那么计算分区时以文件为单位进行分区
 
 
+################### RDD 两种类型的方法：Operator-Transform（转换）和  Operator-Action（行动） ###################
+
 
 RDD方法分类：两大类
 1、转换，功能的补充，将旧的RDD包装成新的RDD
@@ -159,11 +164,13 @@ RDD 方法 ==> RDD 算子
 
 操作：Operator
 
+
+################### Operator-Transform : ###################
+
 RDD转换算子：
 RDD根据数据处理方式的不同将算子整体上分为 Value类型、双Value类型和Key-Value类型
 
 Value 类型
-
 
 map：将处理的数据逐条进行映射转换，这里的转换可以是类型的转换，也可以是值的转换。
 
@@ -205,7 +212,7 @@ flatMap：将处理的数据进行扁平化后再进行映射处理，所以算�
 
 
 
-glom：将同一个分区的数据直接转换为相同类型的的内存数组进行处理，分区不变。
+glom：将同一个分区的数据直接转换为相同类型的内存数组进行处理，分区不变。
 
 
 groupBy：将数据根据指定的规则进行分组，分区默认不变，但是数据会被打乱，我们将这样的操作称为shuffle，极限情况下，数据可能会在同一个分区中。
@@ -338,28 +345,114 @@ foldByKey: 如果聚合计算时，分区内和分区间计算规则相同，Spa
      第二个参数表示：分区内的计算规则
      第三个参数表示：分区间的计算规则
 
+问题：几种聚合算子的区别？
+
+reduceByKey :
+  分区内和分区间计算规则相同
+  combineByKeyWithClassTag[V](
+  (v: V) =>
+   v,   // 第一个值不会参与计算
+   func, // 分区内计算规则
+   func, // 分区间计算规则
+   partitioner)
+
+ aggregateByKey :
+  分区内和分区间计算规则不同
+  combineByKeyWithClassTag[U](
+ (v: V) =>
+  cleanedSeqOp(createZero(), v), // 初始值和第一个key的value值进行的分区内数据操作
+  cleanedSeqOp, // 分区内计算规则
+ combOp, // 分区间计算规则
+ partitioner)
 
 
 
+ foldByKey :
+  分区内和分区间处理函数相同
+ combineByKeyWithClassTag[V]((v: V) =>
+ cleanedFunc(createZero(), v), // 初始值和第一个key的value值进行的分区内数据操作
+ cleanedFunc, // 表示分区内数据的处理函数
+ cleanedFunc, // 表示分区间数据的处理函数
+ partitioner)
+
+
+ combineByKey :
+  分区内和分区间处理函数不同
+ combineByKeyWithClassTag(
+ createCombiner, // 相同的key的第一条数据进行的处理函数
+ mergeValue, // 表示分区内数据的处理函数
+ mergeCombiners, // 表示分区间数据的处理函数
+ defaultPartitioner(self))
 
 
 
+join ：在类型为（K，V）和（K，W）的RDD上调用，返回一个相同的key对应的所有元素连接在一起的（K，（V，W））的RDD
+
+相同于SQL表中的内连接
+
+问题：如果key存在不相等呢？
+注意：
+1、如果两个数据源中key没有匹配上，那么数据不会出现在结果中。
+2、如果两个数据源中key有多个相同的，会依次匹配，可能会出现笛卡尔积，数据量会几何性增长，会导致性能降低；如果有其他办法代替，最好不要用这个算子。
+谨慎使用，如果不用join也能实现同样的功能，那就好了！
+
+
+leftOuterJoin: 类似于SQL语句的左外连接，左表所有的元素都会出现，右表的匹配元素出现
+
+rightOuterJoin：类似于SQL中右外连接；右表所有的元素都会出现，左表的匹配元素出现
 
 
 
+cogroup: connect + group
+相同的key，value分组后连接起来；
+
+该算子可以最多连接三个其他的rdd。
+
+################### Operator-Action （行动）: ###################
+行动算子，其实就是触发作业执行的方法
+底层代码逻辑：调用的是环境对象中 runJob 方法，然后调用dagScheduler（有向无环图）的runJob方法创建ActiveJob，并提交执行。
 
 
+reduce：
+聚合RDD中的所有数据，先聚合分区内数据，在聚合分区间数据
 
 
+collect : 
+采集，该方法会将不同分区间的数据按照分区顺序采集到Driver端，形成数组
 
 
+count : 
+数据源中数据个数
 
 
+first : 
+获取数据源中数据的第一个
 
 
+take : 
+获取数据源中数据的前N个
+
+takeOrdered : 
+数据先排序，再取N个，默认升序排序，可以使用第二个参数列表（比如 ： Ordering.Int.reverse）实现倒序功能
 
 
+aggregate : 分区的数据通过 初始值 和分区内的数据进行聚合，然后再和 初始值 进行分区间的数据聚合
 
+aggregateByKey 和 aggregate 的区别？
+aggregateByKey ：初始值只会参与分区内计算；转换算子，得到新的RDD
+aggregate ：初始值会参与分区内计算，并且还参与分区间计算；行动算子，得到结果
+
+
+fold ：
+折叠，aggregate 简化版，分区内和分区间计算规则相同时
+
+
+countByValue :
+统计数据源中value出现的个数（Long），返回一个Map，value值作为Map的key，个数作为Map的value
+
+
+countByValue :
+要求数据为 Key-Value 类型，统计数据源中 key 出现的个数（Long），返回一个Map，数据源中的 key 值作为Map的key，个数作为Map的value
 
 
 
