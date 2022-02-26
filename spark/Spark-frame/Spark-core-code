@@ -451,10 +451,38 @@ countByValue :
 统计数据源中value出现的个数（Long），返回一个Map，value值作为Map的key，个数作为Map的value
 
 
-countByValue :
+countByKey :
 要求数据为 Key-Value 类型，统计数据源中 key 出现的个数（Long），返回一个Map，数据源中的 key 值作为Map的key，个数作为Map的value
 
 
+save方法：
+saveAsTextFile
+saveAsObjectFile
+saveAsSequenceFile ： 方法要求数据的格式必须为 K-V 键值对类型
+
+
+foreach :
+分布式遍历 RDD中的每一个元素，调用指定函数。
+
+	总结 
+    // 算子 ： Operator （操作）
+    //        RDD的方法和Scala集合对象的方法不一样：
+    //        集合对象的方法都是在同一个节点的内存中完成的
+    //        RDD方法可以将计算逻辑发送到Executor端（分布式节点）执行的
+    // 		  为了区分不同的处理效果，所以将RDD方法称之为算子
+    //		  RDD 方法外部的操作都是在Driver端执行的，而方法内部的逻辑代码是在Executor端执行的。
+
+
+
+RDD 序列化：
+
+1、闭包检测
+ 从计算角度，算子以外的代码都是在Driver端执行，算子里面的代码都是在Executor端执行。那么在scala的函数式编程中，就会导致算子内经常会用到算子外的数据，这样就会形成闭包效果，如果使用的算罪外的数据无法序列化，就意味着无法传值给Executor端执行，就会发生错误，所以需要在执行任务计算前，检测闭包内的对象是否可以进行序列化，这个操作我们称之为 闭包检测。
+ Scala2.12版本后闭包编译方式发生了改变。
+
+ 2、序列化方法和属性
+
+ 
 
 
 
