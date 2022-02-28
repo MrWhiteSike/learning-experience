@@ -2,8 +2,8 @@ Spark核心编程
 
 Spark计算框架为了能够进行高并发和高吞吐的数据处理，封装了三大数据结构，用于处理不同的应用场景，三大数据结构分别是：
 RDD：弹性分布式数据集
-累加器：分布式共享只写变量
-广播变量：分布式共享只读变量
+累加器：分布式共享 只写 变量
+广播变量：分布式共享 只读 变量
 
 
 RDD，Resilient Distributed Dataset
@@ -482,7 +482,278 @@ RDD 序列化：
 
  2、序列化方法和属性
 
+ 3、Kryo序列化框架
+
+ 参考地址:https://github.com/EsotericSoftware/kryo
+ Java 的序列化能够序列化任何的类，但是 比较重 （字节多），序列化后，对象的提交也比较大。Spark出于性能的考虑，Spark2.0开始支持另外一种Kyro序列化机制。Kyro速度是Serializable的10倍。当RDD在Shuffle数据的时候，简单数据类型、数组和字符串类型已经在Spark内部使用Kyro来序列化。
+ 注意：即使使用Kyro序列化，也要 extents Serializable接口。
+
+
+
+ RDD 依赖关系
+ 相邻的两个RDD的关系称之为依赖关系
+ 多个连续的RDD的依赖关系，称之为血缘关系
+
+ RDD不会保存数据的，
+ RDD为了提供容错性，需要将RDD间的关系保存下来，一旦出现错误，可以根据血缘关系将数据源重新读取进行计算。
+
+
+ 1、RDD 血缘关系
+  RDD 只支持粗粒度转换，即在大量记录上执行的单个操作。将创建RDD的一系列 Lineage （血统）记录下来，以便恢复丢失的分区，RDD的Lineage会记录RDD的元数据信息和转换行为，当该RDD的部分分区数据丢失时，它可以根据这些信息来 重新运算 和 恢复丢失的数据分区。
+
+  可以使用 RDD 的toDebugString 算子查看RDD之间的血缘关系
+
+ 2、RDD依赖关系
+ 相邻的两个RDD的关系称之为依赖关系
+ 可以使用 RDD 的toDebugString 算子查看RDD之间的血缘关系
+
+ 新的RDD的一个分区的数据依赖于旧的RDD一个分区的数据，
+ 这个依赖称之为OneToOne依赖（窄依赖）
+
+ 新的RDD的一个分区的数据依赖于旧的RDD多个分区的数据，
+ 这个依赖称之为Shuffle依赖（宽依赖）
+
+3、RDD窄依赖
+窄依赖 表示每一个父（上游）RDD 的partition 最多被 子（下游） RDD的一个partition使用，窄依赖形象的比喻为独生子女。
+class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd)
+
+4、RDD宽依赖
+宽依赖 表示同一个父（上游）RDD的Partition被多个子（下游）RDD的Partition依赖，会引起Shuffle，总结：宽依赖形象的比喻为多生。
+
+class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
+    @transient private val _rdd: RDD[_ <: Product2[K, V]],
+    val partitioner: Partitioner,
+    val serializer: Serializer = SparkEnv.get.serializer,
+    val keyOrdering: Option[Ordering[K]] = None,
+    val aggregator: Option[Aggregator[K, V, C]] = None,
+    val mapSideCombine: Boolean = false,
+    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor)
+  extends Dependency[Product2[K, V]]
+
+
+ 5、RDD阶段划分
+
+ DAG 有向无环图 是由点和线组成的拓扑图形，该图形具有方向，不会闭环。
+  DAG记录了RDD的转换过程和任务的阶段。
+
+ 6、RDD 阶段划分源码
+
+  runJob -> DagScheduler.runJob -> 提交任务事件JobSubmitted -> 处理该事件handleJobSubmitted  -> 划分阶段createResultStage -> 返回阶段对象ResultStage -> 提交阶段submitStage
+  -> submitMissingTasks -> partitionsToCompute
+
+当RDD中存在shuffle依赖时，阶段会自动增加一个
+阶段的数量= shuffle依赖的数量 + 1
+
+ 7、RDD 任务划分 
+  RDD 任务切分为：Application 、 Job、Stage 和 Task
+
+  Application ：初始化一个 SparkContext 即生成一个 Application
+  Job ： 一个Action 算子就会生成一个Job
+  Stage ： Stage 等于宽依赖 的个数 + 1；
+  Task ： 一个stage阶段中，最后一个RDD的分区个数就是 Task的个数。
+
+  注意： Application -> Job -> Stage -> Task 每一层都是 1对N 的关系
+
+ 8、RDD任务划分源码 
+
+ 匹配 ShuffleMapStage 和 ResultStage 是对阶段的划分
+
+ 从源码 partitionsToCompute.map 可以看出：任务个数 = 最后一个RDD的分区个数 
+
+ val taskIdToLocations: Map[Int, Seq[TaskLocation]] = try {
+      stage match {
+        case s: ShuffleMapStage =>
+          partitionsToCompute.map { id => (id, getPreferredLocs(stage.rdd, id))}.toMap
+        case s: ResultStage =>
+          partitionsToCompute.map { id =>
+            val p = s.partitions(id)
+            (id, getPreferredLocs(stage.rdd, p))
+          }.toMap
+      }
+    } catch {
+      case NonFatal(e) =>
+        stage.makeNewStageAttempt(partitionsToCompute.size)
+        listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
+        abortStage(stage, s"Task creation failed: $e\n${Utils.exceptionString(e)}", Some(e))
+        runningStages -= stage
+        return
+    }
+
+
+ RDD 持久化 
+
+
+ 	总结：
+	RDD 中不存储数据
+	如果一个RDD需要重复使用，那么需要从头再次执行来获取数据
+	RDD对象可以重用的，但是数据无法重用
+
+ 持久化 ：可以放到文件（persist 算子）中，也可以放到内存(cache 算子)中 
+
+ cache 默认持久化的操作，只能将数据保存到内存中，如果想保存到磁盘文件，需要更改存储级别
+
+ 注意：
+ 1、RDD 对象的持久化操作不一定是为了重用
+ 2、在数据执行时间或者执行阶段较长，或者数据比较重要的场合也可以采用持久化操作
+
+ 1、RDD Cache缓存
+  RDD 通过 Cache 或者 Persist 方法将前面的计算结果缓存，默认情况下会把数据缓存在JVM的堆内存中。但是并不是这两个方法被调用时立即缓存，而是触发后面的action算子时，该RDD将会被缓存在计算节点的内存中，并供后面重用。
+
+  存储级别:
+
+  DISK_ONLY 存储磁盘
+  DISK_ONLY_2 存储磁盘，并且有副本
+  MEMORY_AND_DISK 存储内存，内存放不下，溢写磁盘
+  MEMORY_AND_DISK_2 存储内存，内存满了，溢写磁盘，并且有副本
+  MEMORY_ONLY 存储内存, 内存放不下，不会溢写磁盘
+  MEMORY_ONLY_2 存储内存, 内存放不下，不会溢写磁盘，并且有副本
+  MEMORY_ONLY_SER 仅在内存存储序列化数据
+  MEMORY_ONLY_SER_2 仅在内存存储序列化后的数据，并且有副本
+  MEMORY_AND_DISK_SER 如果数据在内存中放不下，则溢写磁盘。在内存存储序列化后的数据
+  MEMORY_AND_DISK_SER_2 如果数据在内存中放不下，则溢写磁盘。在内存存储序列化后的数据，并且有副本
+
+ 2、RDD CheckPoint 检查点
+
+ 所谓的检查点其实就是通过将RDD中间结果写入磁盘
+ 由于血缘依赖过长会造成容错成本过高，这样就不如在中间阶段做检查点容错，如果检查点之后有节点出现问题，可以从检查点开始重做血缘，减少开销。
+
+ 对RDD 进行checkpoint操作并不会马上被执行，必须执行Action操作才能触发。
+
+ 1、// 设置 checkpoint 路径
+    sc.setCheckpointDir("cp")
+
+ 2、mapRDD.cache()
+    mapRDD.checkpoint()
+
+
+注意：
+ checkpoint 需要落盘，那就需要指定检查点保存路径
+ 检查点路径中保存文件，当作业执行完成时，不会被删除
+ 一般保存路径都是在分布式存储系统 ：HDFS
+
+ cache 、persist 和 checkpoint之间的区别？
+
+ cache：将数据临时存储在内存中进行数据重用
+ 			会在血缘关系中添加新的依赖,一旦出现问题，可以重头读取数据
+ persist：将数据临时存储在磁盘文件中进行数据重用
+ 			涉及到磁盘IO，性能较低，但是数据安全
+ 			如果作业执行完毕，临时保存到数据文件就会丢失
+ checkpoint：将数据长久保存在磁盘文件中进行数据重用
+ 			涉及到磁盘IO，性能较低，但是数据安全
+ 			为了保证数据安全，所以一般情况下，会独立执行作业（另外再执行一次）。
+ 			为了能够提高效率，一般情况下，是需要我们和cache联合使用的
+ 			执行过程中，会切断血缘关系，重新建立新的血缘关系
+ 			checkpoint等同于改变数据源
+
+
+
+RDD 分区器
+
+Spark 目前支持 Hash 分区 和 Range 分区，和自定义分区。Hash分区为当前的默认分区。分区器直接决定了RDD中分区个数、RDD中每条数据经过 Shuffle后进入哪个分区，进而决定了 Reduce 个数。
+
+ 1、只有 Key - Value 类型的 RDD 才有分区器，非Key - Value类型的RDD分区的值是None
+ 2、每个 RDD 的分区 ID 范围：0～（numPartitions - 1）,决定这个值是属于哪个分区的。
+
+1）、Hash 分区：对于给定的key，计算其 hashCode 并除以分区个数取余
+2)、Range 分区
+
+自定义分区器：
+1、继承 Partitioner
+2、重写方法
+
+
+文件的保存和读取
+save：
+    rdd.saveAsTextFile("output")
+    rdd.saveAsObjectFile("output1")
+    rdd.saveAsSequenceFile("output2")
+load：
+    val rdd = sc.textFile("output")
+    println(rdd.collect().mkString(","))
+    val rdd1 = sc.objectFile[(String, Int)]("output1")
+    println(rdd1.collect().mkString(","))
+    val rdd2 = sc.sequenceFile[String, Int]("output2")
+    println(rdd2.collect().mkString(","))
+
+
+
+
+累加器：分布式共享 只写 变量
+
+实现原理：
+累加器用来把 Executor 端变量信息聚合到 Driver 端。在 Driver 程序中定义的变量，在 Executor 端的每个 Task 都会得到这个变量的一份新的副本，每个 task 更新这些副本的值后，传回 Driver 端进行 merge。
+
+系统累加器：
+Spark 默认就提供了简单数据聚合的累加器，如下：
+val sumAcc = sc.longAccumulator 
+sc.doubleAccumulator
+sc.collectionAccumulator
+// 使用累加器
+sumAcc.add(num)
+// 获取累加器的值
+sumAcc.value
+
+
+自定义数据累加器：
+// 1、继承 AccumulatorV2,定义泛型
+   // IN：累加器输入的数据类型 String
+   // OUT：累加器输出的数据类型 mutable.Map[String, Long]
+  // 2、重写方法
+
+使用自定义数据累加器的步骤：
+1、// 创建累加器对象
+    val accumulator = new MyAccumulator()
+2、// 向Spark 进行注册
+    sc.register(accumulator, "wordCountAcc")
+
+3、// 在行动算子中使用累加器
+        accumulator.add(word)
+4、// 获取累加器累加的结果
+    println(accumulator.value)
+
+
+
+注意：
+1、少加： 转换算子中调用累加器，如果没有行动算子的话，那么不会执行
+2、多加： 转换算子中调用累加器，如果有多个行动算子的话，那么会执行多次
+3、一般情况下，累加器会放置在行动算子中进行操作
+
+
+
+广播变量：分布式共享 只读 变量
+
+实现原理：广播变量用来高效分发较大对象。向所有工作节点发送一个较大的只读值，以供一个或多个Spark 操作使用。比如，如果你的应用需要向所有节点发送一个较大的只读查询表，广播变量用起来就很顺手。在多个并行操作中使用同一个变量，但是 Spark 会为每个任务分别发送。
+
+
+    // 闭包数据，都是以Task 为单位发送的，每个任务中包含闭包数据。
+    // 这样可能会导致，一个Executor中含有大量重复数据，并且占用大量的内存
+
+    // Executor其实就是一个JVM，所以在启动时，会自动分配内存
+    // 完全可以将任务中的闭包数据放置在Executor的内存中，达到共享的目的。
+
+    // Spark中的广播变量，就可以将闭包数据保存到Executor的内存中
+    // Spark 的广播变量不能够更改：分布式共享只读变量
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
  
+
+
+
+
 
 
 

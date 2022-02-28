@@ -1,0 +1,47 @@
+package com.bsk.spark.core.acc
+
+import org.apache.spark.{SparkConf, SparkContext}
+
+object ACC_03 {
+
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setMaster("local").setAppName("Test")
+    val sc = new SparkContext(conf)
+    val rdd = sc.makeRDD(List(1,2,3,4))
+
+    // 获取系统累加器
+    // Spark 默认就提供了简单数据聚合的累加器
+
+    val sumAcc = sc.longAccumulator("sum")
+
+    // sc.doubleAccumulator
+    // sc.collectionAccumulator
+
+    val mapRDD = rdd.map(
+      num => {
+        // 使用累加器
+        sumAcc.add(num)
+        num
+      }
+    )
+
+    // 获取累加器的值
+    // 少加： 转换算子中调用累加器，如果没有行动算子的话，那么不会执行
+//    println("sum = " + sumAcc.value) // 0
+
+    // 多加：
+    // 一般情况下，累加器会放置在行动算子中进行操作
+    mapRDD.collect()
+    mapRDD.collect()
+    println("sum = " + sumAcc.value) // 20
+
+
+
+
+
+
+
+    sc.stop()
+  }
+
+}

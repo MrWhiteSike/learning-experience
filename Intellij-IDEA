@@ -27,3 +27,5 @@ shift + command + enter : 完成当前状态
 
 ctrl + H : 可以快速查看抽象类的实现类
 shift + enter : 鼠标所在行插入新行
+
+双击 shift ：快速查找（比如某个类）
