@@ -1,0 +1,30 @@
+Spark-project-code
+
+三层架构：为了实现工程代码的可维护，可扩展的目的
+
+controller（控制层）
+service（服务层）
+dao（持久层）
+
+
+1、scala 中有控制抽象的逻辑;
+比如：def start(master:String="local[*]", app:String="Application")(op : => Unit)
+其中参数列表 op 就代表 逻辑的抽象 当作参数传入
+并且 op 需要try catch 进行包裹，防止抽象控制的逻辑执行失败。
+
+2、Application
+controller
+service
+dao 
+如果代码重复的部分，都可以 以 trait 的方式抽取到common中，进行复用
+
+3、ThreadLocal 可以对线程的内存进行控制，存储数据，共享数据; 创建一个工具类，可以对 sc 进行 存取、删除操作
+
+ThreadLocalMap
+
+
+
+
+
+
+

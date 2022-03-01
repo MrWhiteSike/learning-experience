@@ -1,0 +1,47 @@
+Spark-examples
+
+样例类：
+// 用户访问动作表
+case class UserVisitAction(
+	date:String, // 用户点击行为的日期
+	user_id:Long, // 用户ID
+	session_id:String, // Session ID
+	page_id:Long, // 某个页面的ID
+	action_time:String, // 动作的时间点
+	search_keyword:String, // 用户搜索的关键词
+	click_category_id:Long, // 某一个商品品类的ID
+	click_product_id:Long, // 某个商品的ID
+	order_category_ids:String, // 一次订单中所有品类的ID集合
+	order_product_ids:String, // 一次订单中所有商品的ID集合
+	pay_category_ids:String, // 一次支付中所有品类的ID集合
+	pay_product_ids:String, // 一次支付中所有商品的ID集合
+	city_id:Long // 城市ID
+)
+
+需求 1: 热门品类的点击数量，下单数量，支付数量的Top10
+
+需求 2: 热门品类Top10的单个品类Top10的Session点击统计
+
+
+需求 3: 页面单跳转化率统计
+说明：
+1）页面单跳转化率：
+	比如一个用户在一次Session过程中，访问的页面路径3，5，7，9，10，21
+	那么页面3 跳到页面 5 叫一次单跳，7-9也叫一次单跳，那么单跳转化率就是要统计页面点击的概率。
+
+	比如：计算3-5的单跳转化率，先获取符合条件的Session 对于页面3的访问次数（PV）为A，然后获取符合条件的Session中访问了页面3 又紧接着访问了页面 5 的次数为B，那么 B/A 就是 3-5 的页面单跳转化率。
+
+
+2）统计页面单跳转化率意义
+	产品经理和运营总监，可以根据这个指标，去尝试分析，整个网站，产品各个页面的表现怎么样，是不是需要去优化产品的布局；吸引用户最终可以进入最后的支付页面。
+
+	数据分析师，以此数据做更深一步的计算和分析。
+
+	企业管理层，可以看到整个公司网站，各个页面之间的跳转表现如何，可以适当调整公司的经营战略或策略。
+
+
+
+
+
+
+

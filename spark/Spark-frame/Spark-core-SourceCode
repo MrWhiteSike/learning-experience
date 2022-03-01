@@ -1,0 +1,92 @@
+Spark-core-SourceCode
+
+
+1、环境准备（Yarn集群）
+	1）Driver ，Executor
+2、组件通信
+	1) Driver => Executor 
+	2) Executor => Driver
+	3) Executor => Executor
+3、应用程序的执行
+	1) RDD 依赖
+	2) 阶段的划分
+	3) 任务的切分
+	4) 任务的调度
+	5) 任务的执行
+4、Shuffle
+	1) Shuffle的原理和执行过程
+	2) Shuffle写磁盘
+	3) Shuffle读取磁盘
+5、内存的管理
+	1) 内存的分类
+	2) 内存的配置
+
+
+
+1、环境准备（Yarn集群）
+
+java org.apache.spark.deploy.SparkSubmit
+/bin/java org.apache.spark.deploy.yarn.ApplicationMaster 又启动一个 ApplicationMaster 进程
+
+
+
+
+
+
+
+
+JVM ==> Process(SparkSubmit) 就是启动一个进程
+
+进程的起点：SparkSubmit.main
+
+	1、parseArguments：解析提交参数
+		--> new SparkSubmitArguments(args)
+		--> parse(args.asJava) 利用的是正则表达式 匹配获取 参数和值
+		--> handle(opt: String, value: String) 对获取的 参数和值 进行处理
+		--> action = Option(action).getOrElse(SUBMIT) 默认为 submit
+		--> validateSubmitArguments() 对提交参数进行安全校验
+	2、submit(appArgs, uninitLog)
+		--> doRunMain()
+		--> runMain(args, uninitLog)
+
+			--> (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
+
+				--> childMainClass = org.apache.spark.deploy.yarn.YarnClusterApplication
+				--> new Client(new ClientArguments(args), conf, null)
+					--> YarnClient = new YarnClientImpl() --> ApplicationClientProtocol rmClient
+				--> run()
+					--> submitApplication()
+						--> launcherBackend.connect()
+      					-->	yarnClient.init(hadoopConf)
+      					-->	yarnClient.start() yarn客户端启动，相当于建立了和yarn集群的连接
+      					--> newApp = yarnClient.createApplication()
+      					newAppResponse = newApp.getNewApplicationResponse() 从RM中获取一个新应用
+      					--> containerContext = createContainerLaunchContext(newAppResponse) 创建容器启动环境，在Yarn当中用来解耦合的，主要配置一些JVM参数以及发送 Java 指令到 NodeManager 去启动 ApplicationMaster 进程
+      					--> appContext = createApplicationSubmissionContext(newApp, containerContext) 创建应用提交环境
+      					--> yarnClient.submitApplication(appContext) 提交应用
+
+			--> app: SparkApplication 生成SparkApplication对象
+			--> app.start(childArgs.toArray, sparkConf) SparkApplication对象 调用 start方法，启动应用程序
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

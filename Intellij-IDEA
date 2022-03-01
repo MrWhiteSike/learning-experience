@@ -25,7 +25,15 @@ command + N / ctrl + enter: 创建构造函数、getter/setter方法
 
 shift + command + enter : 完成当前状态
 
-ctrl + H : 可以快速查看抽象类的实现类
+ctrl + H : 显示当前类的层次结构
+shift + command + H 显示方法层次结构
+ctrl + option + H 显示调用层次结构
+
+
 shift + enter : 鼠标所在行插入新行
 
 双击 shift ：快速查找（比如某个类）
+
+
+option + command + <- / -> : 退回 / 前进到上一个操作的地方
+

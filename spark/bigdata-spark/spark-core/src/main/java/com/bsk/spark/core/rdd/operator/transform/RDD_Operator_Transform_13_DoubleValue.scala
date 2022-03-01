@@ -13,11 +13,11 @@ object RDD_Operator_Transform_13_DoubleValue {
     // 求交集
 //    val newRDD = rdd1.intersection(rdd2)
     // 求并集 : 只是合并不去重，要想去重可以使用 distinct 算子进行去重
-    val newRDD = rdd1.union(rdd2)
+//    val newRDD = rdd1.union(rdd2)
     // 求差集
 //    val newRDD = rdd1.subtract(rdd2)
-    // 拉链, 对应位置一对一映射，组成（key,value）
-//    val newRDD = rdd1.zip(rdd2)
+    // 拉链, 对应位置一对一映射，组成（key,value），需要每个对应分区上的数据个数相同
+    val newRDD = rdd1.zip(rdd2)
 
     println(newRDD.collect().mkString(","))
     sc.stop()
