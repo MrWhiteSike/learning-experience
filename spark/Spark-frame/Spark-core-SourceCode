@@ -27,6 +27,23 @@ Spark-core-SourceCode
 
 java org.apache.spark.deploy.SparkSubmit
 /bin/java org.apache.spark.deploy.yarn.ApplicationMaster 又启动一个 ApplicationMaster 进程
+Driver ： runDriver() --> userThread = new Thread （Driver）--> SparkContext
+
+Executor： 
+
+// 处理可用于分配的容器
+handleAllocatedContainers
+// 运行已分配容器
+runAllocatedContainers
+
+// 准备指令：
+prepareCommand
+
+// 向指定NM启动容器
+nmClient.startContainer
+
+
+/bin/java org.apache.spark.executor.YarnCoarseGrainedExecutorBackend
 
 
 
@@ -61,7 +78,7 @@ JVM ==> Process(SparkSubmit) 就是启动一个进程
       					-->	yarnClient.start() yarn客户端启动，相当于建立了和yarn集群的连接
       					--> newApp = yarnClient.createApplication()
       					newAppResponse = newApp.getNewApplicationResponse() 从RM中获取一个新应用
-      					--> containerContext = createContainerLaunchContext(newAppResponse) 创建容器启动环境，在Yarn当中用来解耦合的，主要配置一些JVM参数以及发送 Java 指令到 NodeManager 去启动 ApplicationMaster 进程
+      					--> containerContext = createContainerLaunchContext(newAppResponse) 创建容器启动环境，在Yarn当中用来解耦合的，主要配置一些JVM参数以及发送 Java 指令到 NodeManager 去启动  ApplicationMaster.main 进程
       					--> appContext = createApplicationSubmissionContext(newApp, containerContext) 创建应用提交环境
       					--> yarnClient.submitApplication(appContext) 提交应用
 
@@ -70,6 +87,161 @@ JVM ==> Process(SparkSubmit) 就是启动一个进程
 
 
 
+ApplicationMaster.main
+
+	--> amArgs = new ApplicationMasterArguments(args) 解析参数
+	--> sparkConf = new SparkConf() 创建SparkConf对象
+		--> sparkConf.set(k, v)
+	--> yarnConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))  创建YarnConfiguration对象
+
+	--> master = new ApplicationMaster(amArgs, sparkConf, yarnConf) 创建ApplicationMaster对象
+		--> client = new YarnRMClient()
+	--> master.run()
+		--> runDriver()
+			--> userClassThread = startUserApplication() 启动用户应用程序
+				--> mainMethod = userClassLoader.loadClass(args.userClass)
+	      .getMethod("main", classOf[Array[String]]) 获取主线程
+	      		--> userThread = new Thread ==> 这个线程就是 Driver，其中创建 SparkContext
+			--> ThreadUtils.awaitResult(sparkContextPromise.future,
+	        Duration(totalWaitTime, TimeUnit.MILLISECONDS)) 线程的阻塞功能，等待SparkContext的创建，等待成功程序就可以继续往下走了
+
+	        --> registerAM(host, port, userConf, sc.ui.map(_.webUrl), appAttemptId) 注册AM ，向ResourceManager申请资源
+	        createAllocator(driverRef, userConf, rpcEnv, appAttemptId, distCacheConf) 返回可用资源列表
+	        	--> allocatedContainers 
+	        	--> handleAllocatedContainers(allocatedContainers) 
+	        	处理可分配的容器资源
+	        		--> runAllocatedContainers 运行已分配容器
+	        			--> launcherPool 线程池启动 Executor 线程（ExecutorRunnable）
+	        				--> ExecutorRunnable
+		        				--> nmClient
+		        				--> startContainer
+			        				--> prepareCommand 准备指令，
+			        				--> nmClient.startContainer 向指定NM启动容器
+			        					--> 执行bin/java 命令执行 YarnCoarseGrainedExecutorBackend.main 启动一个进程
+
+
+YarnCoarseGrainedExecutorBackend.main
+	--> backendArgs = CoarseGrainedExecutorBackend.parseArguments
+	--> CoarseGrainedExecutorBackend.run(backendArgs, createFn) 
+		--> fetcher
+		--> driver
+		--> driverConf
+		--> env = SparkEnv.createExecutorEnv 
+			--> env.rpcEnv.setupEndpoint
+				--> dispatcher.registerRpcEndpoint(name, endpoint)
+					--> RpcEndpointAddress 通信地址
+					--> NettyRpcEndpointRef 通信引用
+					--> DedicatedMessageLoop
+						--> inbox = new Inbox 
+							--> messages.add(OnStart) 
+								OnStart
+								--> driver = Some(ref) ref.ask 发送RegisterExecutor请求 
+								--> CoarseGrainedSchedulerBackend.receiveAndReply 接收RegisterExecutor，并回复true：注册成功
+								--> self.send(RegisteredExecutor) Executor就给自身发送一个RegisteredExecutor消息，
+								--> receive : 接收到RegisteredExecutor，注册成功
+								--> executor = new Executor 创建 Executor对象
+								--> driver.get.send(LaunchedExecutor(executorId)) 启动Executor计算资源
+
+						--> threadpool
+						--> threadpool.submit(receiveLoopRunnable)
+
+ApplicationMaster：
+主要有两条线：
+1、跟资源相关：资源的申请：Driver和Executor的资源
+2、跟计算相关：让Driver继续执行
+resumeDriver()： 让Driver继续执行，Driver是线程，就是让线程继续执行，就是让我们写的程序继续执行
+大致过程：
+首先在我们自己的应用程序中，
+		--> 创建SparkContext对象
+			--> postStartHook 
+				--> ApplicationMaster.sparkContextInitialized(sc) 完成环境初始化，就可以让我们的程序继续往下执行
+				--> super.postStartHook()
+					--> while (!backend.isReady) while 循环，有一个状态的等待，等待通知
+
+		--> ApplicationMaster.resumeDriver() 
+			--> sparkContextPromise.notify() 进行通知，通知后上述的while程序继续往下执行
+
+最终 资源和计算 合二为一来实现业务功能
+
+概念解释：
+rpcEnv ：通信环境
+Backend：后台
+Endpoint: 终端
+
+RpcEndpoint : 通信终端
+它的生命周期 ：constructor -> onStart -> receive* -> onStop
+
+
+
+2、组件通信
+RpcEnv --> NettyRpcEnvFactory
+
+Netty : 通信框架，支持 AIO
+
+BIO ： 阻塞式IO
+NIO ： 非阻塞式IO
+AIO ： 异步非阻塞式IO
+
+Linux 对 AIO支持不够好，windows支持
+
+Linux 采用Epoll方式模仿AIO操作
+
+
+Driver: NettyRpcEnv 
+	TransportServer:通信服务器  RpcEndpoint（receive*）：通信终端，作用用来接收数据
+		DedicatedMessageLoop.Inbox ：收件箱，所有数据都在inbox中
+	RpcEndpointRef（ask*） ：发送数据 
+		Outbox：发件箱，可能有多个TransportClient，和Executor的TransportServer进行连接
+
+Executor：NettyRpcEnv
+	TransportServer:通信服务器  
+	RpcEndpointRef（ask*） ：发送数据 
+		Outbox：发件箱 ，可能有多个TransportClient，和Driver的TransportServer进行连接
+	RpcEndpoint（receive*）：通信终端，作用用来接收数据
+		DedicatedMessageLoop.Inbox ：收件箱，所有数据都在inbox中
+	
+
+
+	SparkEnv.createDriverEnv 
+	--> rpcEnv = RpcEnv.create
+	--> NettyRpcEnvFactory().create
+	--> NettyRpcEnv 
+	--> Utils.startServiceOnPort 就是根据端口创建server
+		--> TransportServer
+		--> NettyUtils.getServerChannelClass
+		--> case EPOLL: return EpollServerSocketChannel.class;
+	--> dispatcher.registerRpcEndpoint
+Executor
+
+
+
+3、应用程序的执行
+
+	核心对象：
+	SparkContext
+		- SparkConf 配置对象 -- 基础环境配置
+		- SparkEnv 环境对象 -- 通信环境
+		- SchedulerBackend 通信后台 -- 主要用于和 Executor 之间进行通信
+		- TaskScheduler 任务调度器 -- 主要用于任务的调度
+		- DAGScheduler 阶段调度器 -- 主要用于阶段的划分以及任务的切分
+
+	1) RDD 依赖
+	new MapPartitionsRDD (textFile) <-OneToOneDependency- new MapPartitionsRDD (flatMap) <-ShuffleDependency-  ShuffledRDD(groupBy)
+
+
+	2) 阶段的划分
+
+	// 创建结果阶段
+	createResultStage 
+		// 获取或创建上级阶段
+		--> getOrCreateParentStages
+			// 如果所依赖的 RDD 不是 ShuffledRDD，就获取或创建 ShuffleMap 阶段 
+			--> getOrCreateShuffleMapStage
+	--> new ResultStage
+	
+	总结：
+	1. 划分阶段个数 = ShuffledRDD 个数 + 1
+	2. Shuffle 需要落盘：ShuffleMapStage 写磁盘，ResultStage 读磁盘
 
 
 
