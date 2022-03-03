@@ -230,9 +230,9 @@ Executor
 
 
 	2) 阶段的划分
-
+	submitJob
 	// 创建结果阶段
-	createResultStage 
+	--> createResultStage 
 		// 获取或创建上级阶段
 		--> getOrCreateParentStages
 			// 如果所依赖的 RDD 不是 ShuffledRDD，就获取或创建 ShuffleMap 阶段 
@@ -240,9 +240,64 @@ Executor
 	--> new ResultStage
 	
 	总结：
-	1. 划分阶段个数 = ShuffledRDD 个数 + 1
+	1. 划分阶段个数 = Shuffled依赖个数 + 1
 	2. Shuffle 需要落盘：ShuffleMapStage 写磁盘，ResultStage 读磁盘
 
+	3) 任务的切分
+
+	submitJob
+	--> eventProcessLoop.post(JobSubmitted)
+	--> handleJobSubmitted
+		--> submitStage
+			--> if (missing.isEmpty) submitMissingTasks
+				--> partitionsToCompute = findMissingPartitions
+				--> tasks = new ShuffleMapTask
+			-->  submitStage(parent)
+
+	总结：
+	总的任务数量 = 所有阶段的每个阶段的最后一个RDD的分区数量之和
+
+	4) 任务的调度
+	TaskSet 一个Task数据集
+	taskScheduler.submitTasks(new TaskSet）
+		--> createTaskSetManager
+			--> new TaskSetManager
+		// default scheduler is FIFO
+		--> schedulableBuilder.addTaskSetManager
+			schedulableBuilder: FIFOSchedulableBuilder,FairSchedulableBuilder
+		--> rootPool.addSchedulable(manager) 往任务池放任务
+			任务池
+		--> backend.reviveOffers() 从任务池中取任务
+		 	--> receive
+		 		--> makeOffers()
+		 				// in a round-robin manner 以轮询的方式来取任务
+		 			--> scheduler.resourceOffers(workOffers) 
+		 				--> getSortedTaskSetQueue 根据调度算法进行排序
+		 					taskSetSchedulingAlgorithm : FairSchedulingAlgorithm; FIFOSchedulingAlgorithm 调度算法
+		 				--> for (taskSet <- sortedTaskSets)  对任务进行轮询
+		 				// 移动数据不如移动计算
+		 				// 计算和数据的位置存在不同的级别，这个级别称之为本地化级别
+		 				// 进程本地化：数据和计算在同一个进程中 （级别最快）
+		 				// 节点本地化：数据和计算在同一个节点中
+		 				// 机架本地化：数据和计算在同一个机架中
+		 				// 任意位置
+		 				--> for (currentMaxLocality <- taskSet.myLocalityLevels)  首选位置的概念
+		 			--> launchTasks(taskDescs) 启动任务
+		 				--> executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask))) 把任务池当中任务序列化后发送到某个远程的 Executor 终端(总的来说，就是 SchedulerBackend 发消息)
+
+	5) 任务的执行
+	ExecutorBackend 接收消息：
+	receive
+	--> LaunchTask
+		--> taskDesc = TaskDescription.decode(data.value) 消息反序列化
+		--> executor.launchTask(this, taskDesc) 启动任务执行
+			--> new TaskRunner 创建任务线程
+				--> task.run
+				--> runTask(context) 表示运行任务，它是一个抽象方法，意味着每个任务都要重写规则
+			--> threadPool.execute(tr) 把任务线程放到线程池中去执行
+
+	总结：
+	计算任务是我们的计算对象来运行的，但是每个运算逻辑在每个任务当中
 
 
 
