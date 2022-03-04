@@ -1,0 +1,76 @@
+dataframe的使用
+
+
+创建DataFrame
+
+在SparkSQL中 SparkSession是创建DataFrame和执行SQL的入口，创建DataFrame有三种方式：
+1、通过spark数据源进行创建
+2、从一个存在的RDD进行转换
+3、从Hive Table进行查询返回
+
+spark.read.
+
+csv format jdbc json load option orc parquet schema table text textFile
+
+注意：如果从内存中获取数据，spark 可以知道数据类型具体是什么，如果是数字，默认作为Int处理；但是从文件读取的数字，不能确定是什么类型，所以用bigint接收，可以和Long类型转换，但是和Int不能进行转换
+
+
+SQL语法：
+
+1、对DataFrame创建一个临时表
+df.createOrReplaceTempView("tableName")
+2、通过SQL语句实现查询全表
+val sqlDf = spark.sql("select * from tableName")
+
+注意：普通临时表是Session范围的，如果想应用范围内有效，可以使用全局临时表。。使用全局临时表时需要全路径访问。
+
+3、对DataFrame创建一个全局表
+df.createOrReplaceGlobalTempView("tablename")
+4、通过sql语句实现查询全表
+spark.sql("select * from global_temp.tablename").show()
+
+
+
+DSL 语法：
+DataFrame 提供一个特定领域语言（domain-specific language，DSL）去管理结构化的数据。
+可以在Scala，java，python和R 中使用DSL，使用DSL语法风格不必去创建临时视图了。
+
+1、创建一个DataFrame
+val df = spark.read.json("data/user.json")
+
+2、查看DataFrame的Schema信息
+df.printSchema
+
+3、只查看username列数据
+df.select("username").show()
+
+4、查询username列数据，以及age列+1
+df.select($"username",$"age"+1).show()
+// 单引号的写法
+df.select('age+1).show()
+注意：涉及到运算的时候，每列都必须使用$,或者采用引号表达式：单引号+字段名
+
+
+5、查询age>30的数据
+df.filter($"age">30).show()
+
+6、按照age分组，查看数据条数
+df.groupBy("age").count().show()
+
+
+
+
+RDD转换为DataFrame
+
+
+
+
+
+
+
+
+
+
+
+
+

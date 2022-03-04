@@ -300,15 +300,73 @@ Executor
 	计算任务是我们的计算对象来运行的，但是每个运算逻辑在每个任务当中
 
 
+Spark任务调度概述
+
+当Driver起来后，Driver则会根据用户程序逻辑准备任务，并根据Executor资源情况逐步分发任务
+
+几个概念：Job，stage，task
+Job ：以action算子为界，遇到一个action方法则触发一个Job
+stage ：是Job的子集，以RDD宽依赖即（Shuffle）为界，遇到Shuffle做一次划分
+Task：是stage 的子集，以并行度（分区数）来衡量，一个阶段的最后一个RDD的分区数是多少，则有多少个task
+
+Spark的任务调度总体来说分两路进行，一路是Stage级的调度，一路是Task级的调度，总体调度流程
 
 
 
 
+4、Shuffle
+
+Shuffle 一定会有落盘
+如果Shuffle过程中落盘数据量减少，那么可以提交性能。
+算子如果存在预聚合功能，可以提高Shuffle的性能
+
+1) Shuffle的原理和执行过程
+ shuffleWriterProcessor ==> 写处理器
+ ShuffleManager (trait) ==> 只有一个SortShuffleManager实现
+
+
+SortShuffleManager
+getWriter
+
+	case：
+	处理器
+		写对象
+		判断条件
+
+		 SerializedShuffleHandle
+		 	UnsafeShuffleWriter
+		 	1.序列化规则支持重定位操作（Java序列化不支持，Kyro支持）
+		 	2.不能使用预聚合
+		 	3.如果下游的分区数量小于或者等于16777216
+
+		 BypassMergeSortShuffleHandle
+		 	BypassMergeSortShuffleWriter
+		 	1.不能使用预聚合
+		 	2.如果下游的分区数量小于等于200（可配）
+
+		 BaseShuffleHandle
+		 	SortShuffleWriter
+		 	其他情况
+
+
+SortShuffleWriter
+ sorter 排序器
 
 
 
+5、内存的管理
+
+3.0之前 静态内存管理
+3.0之后 统一内存管理（动态内存管理）
+	1) 内存的分类
+	存储内存：缓存数据，广播变量  30%
+	执行内存：Shuffle过程中操作  30%
+	其他内存：系统，RDD元数据信息 40%
+	预留内存：300M
 
 
+
+	2) 内存的配置
 
 
 

@@ -1,0 +1,70 @@
+spark-sql-model
+
+SparkSql特点
+
+1、易整合
+无缝整合了SQL查询和Spark编程
+
+2、统一的数据访问
+使用相同的方式连接不同的数据源。
+
+3、兼容Hive
+在已有的仓库上直接运行SQL或者HiveQl
+
+4、标准数据连接
+通过JDBC连接MySQL
+
+DataFrame
+
+DataFrame是一种以RDD为基础的分布式数据集，类似于传统数据库中的二维表格。
+DataFrame与RDD的区别：
+前者带有schema元信息，即DataFrame表示的二维表数据集的每一列带有名称和类型。。
+这使得SparkSQL得以洞察更多结构信息，从而对藏于DataFrame背后的数据源以及作用于DataFrame之上的变换进行了针对性的优化，最终达到大幅度提升运行效率的目标。
+反观RDD，由于无从得知所存数据元素的具体内部结构，Spark Core只能在stage层面进行简单、通用的流水线优化。
+
+
+DataFrame 是为数据提供了Schema的视图，可以把它当作数据库中的一张表来对待。
+DataFrame 也是懒执行的，但性能上比RDD要高，主要原因：优化的执行计划，即查询计划通过
+Spark catalyst optimiser 进行优化。
+
+
+DataSet
+
+DataSet 是分布式数据集合。是spark 1.6 中添加的一个新抽象，是DataFrame的一个扩展。它提供了RDD的优势以及SparkSQL优化执行引擎的优点。DataSet 也可以使用功能性的转换（操作 map，flatMap，filter等）
+
+* DataSet 是DataFrame API 的一个扩展，是SparkSQL最新的数据抽象
+* 用户友好的API风格，即具有类型安全检查也具有DataFrame 的查询优化特性
+* 用样例类来对DataSet 中定义数据的结构信息，样例类中每个属性的名称直接映射到DataSet 中的字段名称
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
