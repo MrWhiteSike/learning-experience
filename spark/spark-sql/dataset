@@ -1,0 +1,88 @@
+dataset
+
+DataSet 具有强类型的数据集合，需要提供对应的类型信息。
+
+1、使用样例类序列创建DataSet 
+
+case class Person(name:String,age:Long)
+
+val caseClassDS = Seq(Person("zhangsan",39)).toDS()
+
+caseClassDS.show()
+
+
+2、DataFrame转换为DataSet
+
+as[样例类]
+
+case class User(age:Long,name:String)
+
+val ds = df.as[User]
+
+ds.show()
+
+3、DataSet 转换为 DataFrame
+
+val df = ds.toDF()
+
+4、RDD转换为DataSet
+
+必须样例类
+val rdd = sc.makeRDD(List(User(30,"zhangsan")))
+val ds = rdd.toDS()
+
+5、DataSet转换为RDD
+
+val rdd = ds.rdd()
+
+
+RDD、DataFrame、DataSet三者关系
+
+
+如果同样的数据给到这三个数据结构，他们分别计算后，都会给出相同的结果。不同的是他们的执行效率和执行方式。
+
+
+三者共性；
+1、都是spark平台下的分布式弹性数据集，为处理超大型数据提供便利。
+2、都有惰性机制，在进行创建转换时，不会立即执行，只有在也遇到Action时，才会开始触发执行。
+3、有许多共同的函数，如filter，排序等
+
+4、都会根据Spark内存情况自动缓存运算，这样即使数据量很大，也不用担心会内存溢出。
+5、都有partition概念
+6、DataFrame和DataSet均可使用模式匹配获取各个字段的值和类型
+
+
+三者区别：
+
+RDD：
+一般和Spark Mllib同时使用
+RDD不支持sparksql操作
+
+
+DataFrame
+与RDD和DataSet不同，DataFrame每一行的类型固定为Row，每一列的值没法直接访问，只有通过解析才能获取各个字段的值
+DataFrame与DataSet一般不与Spark MLlib同时使用
+
+DataFrame与DataSet均支持Spark SQL的操作，
+DataFrame与DataSet 还支持特别方便的保存方式，比如保存成csv
+
+
+DataSet 
+DataFrame与DataSet 拥有完全相同的成员函数，区别只是每一行的数据类型不同。DataFrame 其实只是DataSet的一个特例。
+DataFrame=DataSet[Row]
+DataFrame 每一行的类型是Row，每一行究竟有哪些字段，各个字段又是什么类型都无从得知，只能用上面提到的getAs方法或者共性中提到的模式匹配拿出特定字段。而DataSet，每一行是什么类型是不一定的，自定义case class 之和可以很自由的获得每一行的信息。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
