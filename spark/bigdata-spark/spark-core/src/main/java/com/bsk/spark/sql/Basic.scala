@@ -59,6 +59,7 @@ object Basic {
     val df1 = ds.toDF()
 
     // RDD <=> DataSet
+    // 先转换为样例类的数据结构，然后再转成DataSet
     val ds1 = rdd.map {
       case (age, name) => {
         Person(age, name)

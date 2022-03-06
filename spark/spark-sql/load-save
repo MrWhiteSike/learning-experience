@@ -1,0 +1,97 @@
+load-save
+
+
+1、通用的加载和保存方式
+SparkSQL 提供了通用的保存数据和数据加载方式。通用：使用相同的API，根据不同参数读取和保存不同格式的数据，Spark SQL 默认读取和保存的文件格式为parquet（列式存储）
+
+加载：
+如果读取不同格式的数据，可以对不同的数据格式进行设定：
+read.load
+read.format("格式")[.option("")].load
+
+
+format：指定加载的数据类型，包括：csv， jdbc，json，orc，parquet，textFile
+
+option(""): 在jdbc 格式下，需要传入JDBC相应参数，url，user，password，和dbtable 
+
+
+
+
+保存：
+write.save
+write[.mode("")].format("格式")[.option("")].save
+
+format: 同上
+option：同上
+
+保存操作可以使用SaveMode，用来指明如何处理数据，使用mode()方法来设置。
+注意：这些SaveMode都是没有加锁的，也不是原子操作。。
+SaveMode是一个枚举类，其中的常量包括：
+
+SaveMode.ErrorIfExists(default) "error" 如果文件已经存在则抛出异常
+SaveMode.Append "append" 如果文件已经存在则追加
+SaveMode.Overwrite "overwrite" 如果文件已经存在则覆盖
+SaveMode.Ignore "ignore" 如果文件已经存在则忽略
+
+
+
+
+parquet： 是一种能够有效存储嵌套数据的列式存储格式。
+
+修改配置项 spark.sql.sources.default, 可修改默认数据源格式。
+
+json：加载为一个DataSet[Row]
+注意：Spark读取的json文件不是传统的json文件，每一行都应该是一个json串。
+
+
+
+MySQl :
+
+1、导入依赖
+<dependency>
+    <groupId>mysql</groupId>
+    <artifactId>mysql-connector-java</artifactId>
+    <version>5.1.35</version>
+</dependency>
+
+
+
+
+
+连接外部的HIVE：
+如果想连接已经部署好的Hive，需要通过以下几个步骤：
+1、Spark要接管Hive需要把hive-site.xml拷贝到conf/目录下
+2、把Mysql的驱动拷贝到jars/目录下
+3、如果访问不到hdfs，则需要把core-site.xml 和 hdfs-site.xml拷贝到conf/目录下
+4、重启spark-shell
+
+
+代码操作Hive：
+1、导入依赖
+ <dependency>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-hive_2.12</artifactId>
+    <version>3.0.0</version>
+</dependency>
+<dependency>
+    <groupId>org.apache.hive</groupId>
+    <artifactId>hive-exec</artifactId>
+    <version>1.2.1</version>
+</dependency>
+
+<dependency>
+    <groupId>mysql</groupId>
+    <artifactId>mysql-connector-java</artifactId>
+    <version>5.1.35</version>
+</dependency>
+
+
+
+
+
+
+
+
+
+
+
