@@ -1,0 +1,165 @@
+DStream
+
+DStream 的创建
+
+1、RDD队列
+
+可以使用ssc.queueStream(queue of RDDs) 来创建DStream，每一个推送到这个队列中的RDD，都会作为一个DStream处理。
+
+2、自定义数据源
+
+需要继承 Receiver ，并实现onStart，onStop 方法来自定义数据源采集。
+
+ReceiverInputDStream = ssc.receiverStream(new MyReceiver())
+
+
+3、Kafka 数据源 （面试，开发重点）
+
+版本选型：
+ReceiverAPI：需要一个专门的Executor去接收数据，然后发送给其他的Executor做计算。存在问题，接收数据的Executor和计算的Executor速度会有所不同，特别在接收数据的Executor速度大于计算的Executor速度，会导致计算数据的节点内存溢出。早期版本中提供此方法，当前版本不适用。
+
+DirectAPI：是由计算的Executor来主动消费kafka的数据，速度由自身控制。
+
+Kafka 0-8 Receiver模式 和 Kafka 0-8 Direct模式 不适用当前版本（3.0.0）
+
+采用Kafka 0-10 Receiver模式 ，可以适用
+1）导入依赖
+<dependency>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-streaming-kafka-0-10_2.12</artifactId>
+    <version>${spark.version}</version>
+</dependency>
+<dependency>
+    <groupId>com.fasterxml.jackson.core</groupId>
+    <artifactId>jackson-core</artifactId>
+    <version>2.10.1</version>
+</dependency>
+
+2) 使用 KafkaUtils.createDirectStream 方法 来获取 Kafka 数据流 InputDStream[ConsumerRecord[T, U]]
+
+例如：
+val kafkaPara = Map[String, Object](
+  ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> "localhost:9092",
+  ConsumerConfig.GROUP_ID_CONFIG -> "test",
+  "key.deserializer" -> "org.apache.kafka.common.serialization.StringDeserializer",
+  "value.deserializer" -> "org.apache.kafka.common.serialization.StringDeserializer"
+)
+
+val kafkaDataDStream = KafkaUtils.createDirectStream[String, String](
+  ssc,
+  LocationStrategies.PreferConsistent,
+  ConsumerStrategies.Subscribe[String, String](Set("test"), kafkaPara)
+)
+kafkaDataDStream.map(_.value()).print()
+
+
+DStream 转换
+
+DStream 上的操作与RDD 类似，分为 Transformations （转换）和 Output Operations（输出）两种，此外转换操作中还有一些比较特殊的原语，如：
+updateStateByKey(),transform() 以及各种window相关的原语。
+
+1、无状态转化操作
+无状态转化操作就是把简单的RDD转化操作应用到每个批次上，也就是转化DStream中的每一个RDD。
+注意：针对键值对的DStream转化操作（比如 reduceByKey）要添加
+import StreamingContext._ 才能在Scala中使用。
+
+包括：
+map，flatMap，filter，repartition，reduceByKey，groupByKey
+
+transform 方法可以将底层的RDD，获取后进行操作，使用场景：
+	1、DStream 功能不完善
+	2、需要代码周期性的执行
+
+join：底层其实就是两个RDD的join
+
+
+
+
+2、有状态转化操作
+1）UpdateStateByKey
+UpdateStateByKey 原语用于记录历史记录，有时，我们需要在DStream中跨批次维护状态。
+针对这种情况，UpdateStateByKey为我们提供了一个状态变量的访问，用于键值对形式的DStream。给定一个由（键，事件）对构成的DStream，并传递一个指定如何根据新的事件更新每个键对应状态的函数，它可以构建出一个新的DStream，其内部数据为（键，状态）对。
+
+其实就是加了一层缓存区，用于存放保存历史数据，然后和新数据进行聚合，最后更新缓存区为聚合后的数据
+
+传递两个参数：
+第一个：表示相同的key的value 的集合
+第二个：表示缓存区相同key的value数据
+
+例如：
+wordToOne.updateStateByKey(
+  (seq: Seq[Int], buff: Option[Int]) => {
+    // 就是把缓存区的数据（可有可无的）取出，和当前区间的数据进行聚合，然后将聚合的值更新到缓存区中
+    val newCount = buff.getOrElse(0) + seq.sum
+    Option(newCount)
+  }
+)
+
+window：窗口可以滑动的，但是默认情况下，一个采集周期进行滑动
+可能会出现重复数据的计算，为了避免这种情况，可以改变滑动的幅度（步长）
+注意：窗口大小和滑动步长必须为采集周期大小的整数倍。
+
+window(windowLength,slideDuration)
+countByWindow(windowLength,slideDuration)
+reduceByWindow(reduceFunc,windowLength,slideDuration)
+reduceByWindow(reduceFunc,invReduceFunc,windowLength,slideDuration)
+
+reduceByKeyAndWindow(reduceFunc,windowLength,slideDuration)
+reduceByKeyAndWindow(reduceFunc,invReduceFunc,windowLength,slideDuration)
+reduceByKeyAndWindow(reduceFunc,windowLength,slideDuration,numPartitions)
+reduceByKeyAndWindow(reduceFunc,windowLength,slideDuration,partitioner)
+reduceByKeyAndWindow(reduceFunc,invReduceFunc,windowLength,slideDuration,numPartitions,filterFunc)
+reduceByKeyAndWindow(reduceFunc,invReduceFunc,windowLength,slideDuration,partitioner,filterFunc)
+
+
+
+
+DStream 输出
+
+输出操作指定了对流数据经转化操作得到的数据所要执行的操作，
+与RDD中的惰性求值类似，如果一个DStream以及派生出的DStream都没有被执行输出操作，那么这些DStream就都不会被求值。如果StreamingContext中没有设定输出操作，整个context就都不会启动。
+
+
+输出操作：
+print：
+
+saveAsTextFile()
+
+
+saveAsHadoopFiles()
+将Stream中的数据保存为Hadoop 文件，每一批次的存储文件名基于参数的
+为 prefix-Time_IN_MS[.suffix].
+
+foreachRDD(func) :
+最通用的输出操作，即将函数func用于生产stream的每一个RDD。
+其中参数传入的函数func应该实现将每一个RDD中数据推送到外部系统，
+如将RDD存入文件或通过网络将其写入数据库。
+
+foreachRDD，用来对DStream中的RDD运行任意计算，这和transfor有些类似，都可以让我们访问任意RDD，在foreachRDD中，可以重用我们在spark中实现的所有行动操作，比如：常见的用例之一是把数据写到MySQL的外部数据库中。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

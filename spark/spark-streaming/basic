@@ -1,0 +1,51 @@
+basic
+
+概念 介绍
+
+// 数据处理的方式角度
+流式（Streaming）数据处理
+批量（batch）数据处理
+
+// 数据处理延迟的长短
+实时数据处理：毫秒级别
+离线数据处理：小时 or 天级别
+
+
+SparkStreaming 准实时（秒或分钟），微批次（时间，比如3s）的数据处理框架
+
+
+SparkStreaming 用于流式数据的处理，支持的数据源很多：
+kafka，Flume，Twitter，ZeroMQ和简单的TCP套接字等。
+数据输入后可以用Spark的高度抽象原语如：map，reduce，join，window等进行运算。而结果也能保存在很多地方：HDFS，数据库等
+
+
+和Spark基于RDD的概念很相似，SparkStreaming 使用离散化流作为抽象表示，叫作DStream。
+DStream是随时间推移而收到的数据的序列。在内部，每个时间区间收到的数据都作为RDD存在，而DStream是由这些RDD组成的序列（因此得名“离散化”）。所以简单来讲，DStream就是对RDD在实时数据处理场景的一种封装。
+
+
+特点：
+1、易用
+2、容错
+3、易整合到Spark体系
+
+为了更好的协调数据接收速率与资源处理能力，1.5版本开始SparkStreaming 可以动态控制数据接收速率来适配集群数据处理能力。
+背压机制：根据JobScheduler反馈作业的执行信息来动态调整Receiver数据接收率。
+通过属性 spark.streaming.backpressure.enabled 来控制是否启用 backpressure 机制，默认值false，即不启用。
+
+
+Linux系统开启本地Socket的命令：nc -l 9999 或者  nc -lk 8888
+Window系统：nc -lp 9999
+
+
+
+
+
+
+
+
+
+
+
+
+
+
