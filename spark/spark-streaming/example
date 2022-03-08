@@ -1,0 +1,101 @@
+example
+
+
+
+
+Application => Kafka => SparkStreaming => Analysis => MySQL
+
+
+MockData : 
+生成模拟数据
+格式：timestamp area city userid adid
+含义：时间戳 		区域 城市   用户   广告
+
+
+需求 1: 广告黑名单
+
+实现实时的动态黑名单机制：将每天对某个广告点击超过100次的用户拉黑。
+黑名单保存到MySQL 中
+
+MySQL 建表：
+1）存放黑名单用户的表
+create table black_list (userid char(1) primary key);
+
+
+2）存放单日各用户点击每个广告的次数
+create table user_ad_count (
+	dt varchar(255),
+	userid char(1),
+	adid char(1),
+	count bigint,
+	primary key (dt,userid,adid)
+);
+
+
+需求2 ：广告点击量实时统计
+
+实时统计每天各地区各城市各广告的点击总流量，并将其存入MySQL
+
+思路：
+1）单个批次内对数据进行按照天纬度的聚合统计
+2）结合MySQL数据跟当前批次数据更新原有的数据。
+
+MySQL 建表：
+create table area_city_ad_count (
+	dt varchar(255),
+	area varchar(255),
+	city varchar(255),
+	adid varchar(255),
+	count bigint,
+	primary key (dt,area,city,adid)
+);
+
+
+注意：
+插入的时候，如果没有直接新增；如果有需要更新数据的时候，
+可以使用下面的语法进行更新：
+on DUPLICATE KEY
+UPDATE count = count + ?
+
+"""
+ insert into area_city_ad_count (dt,area,city,adid,count)
+ values (?,?,?,?,?)
+ on DUPLICATE KEY
+ UPDATE count = count + ?
+"""
+
+
+
+需求3: 最近一小时广告点击量
+
+思路：
+1）开窗确定时间范围
+2）在窗口内将数据转换数据结构为（（adid，hm），count）
+3）按照广告id进行分组处理，组内按照时分排序
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

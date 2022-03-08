@@ -21,7 +21,7 @@ object SparkStreaming_Resume {
     // 设置检查点路径，保存检查点
     ssc.checkpoint("cp")
 
-    // 这可以启动一个线程去进行优雅的关闭操作
+    // TODO 这可以启动一个线程去进行优雅的关闭操作
 
     ssc.start()
     ssc.awaitTermination() // block 阻塞main线程
