@@ -173,7 +173,7 @@ RDD 方法 ==> RDD 算子
 RDD转换算子：
 RDD根据数据处理方式的不同将算子整体上分为 Value类型、双Value类型和Key-Value类型
 
-Value 类型
+Value 类型 （map, mapPartitions, flatMap, glom, groupBy, filter, sample, distinct, coalesce, repartition, sortBy）
 
 map：将处理的数据逐条进行映射转换，这里的转换可以是类型的转换，也可以是值的转换。
 
@@ -270,7 +270,7 @@ sortBy: 根据指定的规则进行排序，默认为升序，第二个参数可
 		sortBy 默认情况下，不会改变分区，但是中间存在shuffle操作
 
 
-双 Value 类型：
+双 Value 类型： (intersection, union, subtract, zip)
 
 intersection : 对源RDD和参数RDD求交集后返回一个新的RDD
 
@@ -287,7 +287,7 @@ zip：将两个RDD中的元素，以键值对的形式进行合并。其中，�
 2、拉链：两个数据源的数据类型可以不一致，但是，两个数据源的分区数量要保持一致，并且每个分区中数据数量也要保持一致
 
 
-Key-Value 类型：
+Key-Value 类型：(partitionBy, reduceByKey, groupByKey, aggregateByKey, foldByKey, combineByKey, join, leftOuterJoin, rightOuterJoin, cogroup)
 
 
 partitionBy：将数据按照指定Partitioner重新进行分区。
@@ -415,6 +415,9 @@ cogroup: connect + group
 行动算子，其实就是触发作业执行的方法
 底层代码逻辑：调用的是环境对象中 runJob 方法，然后调用dagScheduler（有向无环图）的runJob方法创建ActiveJob，并提交执行。
 
+reduce, collect, count, first, take, takeOrdered, aggregate, fold, 
+countByKey, countByValue, saveAsTextFile, saveAsObjectFile, saveAsSequenceFile, foreach
+
 
 reduce：
 聚合RDD中的所有数据，先聚合分区内数据，在聚合分区间数据
@@ -447,7 +450,7 @@ aggregate ：初始值会参与分区内计算，并且还参与分区间计算�
 
 
 fold ：
-折叠，aggregate 简化版，分区内和分区间计算规则相同时
+折叠，aggregate 简化版，分区内和分区间计算规则相同
 
 
 countByValue :
@@ -480,8 +483,10 @@ foreach :
 RDD 序列化：
 
 1、闭包检测
- 从计算角度，算子以外的代码都是在Driver端执行，算子里面的代码都是在Executor端执行。那么在scala的函数式编程中，就会导致算子内经常会用到算子外的数据，这样就会形成闭包效果，如果使用的算罪外的数据无法序列化，就意味着无法传值给Executor端执行，就会发生错误，所以需要在执行任务计算前，检测闭包内的对象是否可以进行序列化，这个操作我们称之为 闭包检测。
+ 从计算角度，算子以外的代码都是在Driver端执行，算子里面的代码都是在Executor端执行。那么在scala的函数式编程中，就会导致算子内经常会用到算子外的数据，这样就会形成闭包效果，如果使用的算子外的数据无法序列化，就意味着无法传值给Executor端执行，就会发生错误，所以需要在执行任务计算前，检测闭包内的对象是否可以进行序列化，这个操作我们称之为 闭包检测。
  Scala2.12版本后闭包编译方式发生了改变。
+
+ 数据库的连接是不可以序列化进行传递的。
 
  2、序列化方法和属性
 
@@ -589,7 +594,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
  	总结：
 	RDD 中不存储数据
 	如果一个RDD需要重复使用，那么需要从头再次执行来获取数据
-	RDD对象可以重用的，但是数据无法重用
+	RDD对象是可以重用的，但是数据无法重用
 
  持久化 ：可以放到文件（persist 算子）中，也可以放到内存(cache 算子)中 
 
@@ -640,7 +645,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
  			会在血缘关系中添加新的依赖,一旦出现问题，可以重头读取数据
  persist：将数据临时存储在磁盘文件中进行数据重用
  			涉及到磁盘IO，性能较低，但是数据安全
- 			如果作业执行完毕，临时保存到数据文件就会丢失
+ 			如果作业执行完毕，临时保存的数据文件就会丢失
  checkpoint：将数据长久保存在磁盘文件中进行数据重用
  			涉及到磁盘IO，性能较低，但是数据安全
  			为了保证数据安全，所以一般情况下，会独立执行作业（另外再执行一次）。
@@ -736,71 +741,4 @@ sumAcc.value
 
     // Spark中的广播变量，就可以将闭包数据保存到Executor的内存中
     // Spark 的广播变量不能够更改：分布式共享只读变量
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

@@ -4,6 +4,9 @@ DataSet 具有强类型的数据集合，需要提供对应的类型信息。
 
 1、使用样例类序列创建DataSet 
 
+首先需要引入
+import spark.implicits._
+
 case class Person(name:String,age:Long)
 
 val caseClassDS = Seq(Person("zhangsan",39)).toDS()
@@ -70,18 +73,7 @@ DataFrame与DataSet 还支持特别方便的保存方式，比如保存成csv
 DataSet 
 DataFrame与DataSet 拥有完全相同的成员函数，区别只是每一行的数据类型不同。DataFrame 其实只是DataSet的一个特例。
 DataFrame=DataSet[Row]
-DataFrame 每一行的类型是Row，每一行究竟有哪些字段，各个字段又是什么类型都无从得知，只能用上面提到的getAs方法或者共性中提到的模式匹配拿出特定字段。而DataSet，每一行是什么类型是不一定的，自定义case class 之和可以很自由的获得每一行的信息。
-
-
-
-
-
-
-
-
-
-
-
+DataFrame 每一行的类型是Row，每一行究竟有哪些字段，各个字段又是什么类型都无从得知，只能用上面提到的getAs方法或者共性中提到的模式匹配拿出特定字段。而DataSet，每一行是什么类型是不一定的，自定义case class 之后可以很方便的通过字段获得每一行的信息。
 
 
 

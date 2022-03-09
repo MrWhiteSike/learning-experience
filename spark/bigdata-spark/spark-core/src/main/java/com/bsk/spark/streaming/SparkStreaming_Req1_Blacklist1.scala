@@ -75,7 +75,7 @@ object SparkStreaming_Req1_Blacklist1 {
 
     ds.foreachRDD(
       rdd => {
-        // 问题：rdd.foreach 方法会每一条数据创建连接
+        // 问题：rdd.foreach 方法会为每一条数据去创建MySQL连接，资源消耗比较大，性能比较低，代价比较昂贵。
 
         // foreach是RDD的算子，算子之外的代码是在Driver端执行，算子内的代码是在Executor端执行的
         // 这样就会涉及到闭包操作，Driver端的数据就需要传递到 Executor 端，需要将数据进行序列化

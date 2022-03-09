@@ -6,7 +6,7 @@ SparkSQL 提供了通用的保存数据和数据加载方式。通用：使用�
 
 加载：
 如果读取不同格式的数据，可以对不同的数据格式进行设定：
-read.load
+spark.read.load
 read.format("格式")[.option("")].load
 
 
@@ -18,7 +18,7 @@ option(""): 在jdbc 格式下，需要传入JDBC相应参数，url，user，pass
 
 
 保存：
-write.save
+df.write.save
 write[.mode("")].format("格式")[.option("")].save
 
 format: 同上

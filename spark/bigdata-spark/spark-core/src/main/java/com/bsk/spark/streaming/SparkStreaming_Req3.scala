@@ -17,7 +17,7 @@ object SparkStreaming_Req3 {
 
   def main(args: Array[String]): Unit = {
     val sparkConf = new SparkConf().setMaster("local[*]").setAppName("SparkStreaming")
-    val ssc = new StreamingContext(sparkConf, Seconds(10))
+    val ssc = new StreamingContext(sparkConf, Seconds(5))
 
     val kafkaPara = Map[String, Object](
       ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> "localhost:9092",
@@ -40,9 +40,9 @@ object SparkStreaming_Req3 {
       }
     )
 
-    // 最近一分钟，每10秒计算一次
+    // 最近一分钟中，每10秒计算一次（）
 
-    // 这里涉及窗口的计算
+    // 这里涉及窗口的计算：在某个窗口范围内，每个滑动时间窗口内的数据进行统计
     val ds = adClickData.map(
       data => {
         val ts = data.ts.toLong
@@ -57,12 +57,12 @@ object SparkStreaming_Req3 {
 //    ds.print()
 
     // 时间排序后打印
-    /*ds.foreachRDD(
+    ds.foreachRDD(
       rdd => println(rdd.sortByKey(true).collect().mkString(","))
-    )*/
+    )
 
     // 以一定格式输出到json文件中 TODO 出现重复的时间问题
-    ds.foreachRDD(
+    /*ds.foreachRDD(
       rdd => {
         val list = ListBuffer[String]()
         val datas = rdd.sortByKey(true).collect()
@@ -79,7 +79,7 @@ object SparkStreaming_Req3 {
         out.flush()
         out.close()
       }
-    )
+    )*/
 
     ssc.start()
     ssc.awaitTermination()

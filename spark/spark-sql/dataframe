@@ -1,5 +1,7 @@
-dataframe的使用
+dataframe
 
+
+Dataframe 一种弱类型的数据集合，每一行的类型固定为Row，可以使用getAs方法或者模式匹配来获得Row中的字段信息
 
 创建DataFrame
 
@@ -22,7 +24,7 @@ df.createOrReplaceTempView("tableName")
 2、通过SQL语句实现查询全表
 val sqlDf = spark.sql("select * from tableName")
 
-注意：普通临时表是Session范围的，如果想应用范围内有效，可以使用全局临时表。。使用全局临时表时需要全路径访问。
+注意：普通临时表是Session范围的，如果想应用范围内有效，可以使用全局临时表。使用全局临时表时需要全路径访问。
 
 3、对DataFrame创建一个全局表
 df.createOrReplaceGlobalTempView("tablename")
