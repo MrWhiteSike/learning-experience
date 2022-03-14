@@ -1,0 +1,31 @@
+redis
+
+
+1、下载redis镜像：
+docker pull redis:5.0.5
+
+
+
+2、docker启动redis镜像同时设置密码：
+docker run -d  --name redis1  -p 6379:6379  redis:latest --requirepass "123456"
+参数解释：     -d : 后台运行   -name 为容器的名字    -p 端口映射   --requirepass：redis密码    redis为镜像名 latest ：表示redis最新版本
+
+3、查看容器启动情况
+docker ps
+
+
+4、docker利用redis-cli进入redis控制台：
+docker exec -it 93382 redis-cli -h localhost -p 6379 -a 123456
+
+redis-cli -h localhost -p 6379 -a 123456
+-h host:远程redis服务器host
+-p port:远程redis服务端口
+-a password:远程redis服务密码（无密码的的话就不需要-a参数了）
+
+
+5、执行redis 命令
+keys
+
+hgetall key
+
+hget key field

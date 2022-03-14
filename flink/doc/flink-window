@@ -1,0 +1,48 @@
+flink-window
+
+窗口 window
+
+就是将无界流切割成有界流的一种方式，它会将流数据分发到有限大小的桶（bucket）中进行分析
+
+window类型：
+
+时间窗口：Time Window
+	滚动时间窗口：窗口大小
+	滑动时间窗口：窗口大小，滑动步长
+	会话窗口：一段时间没有数据的时间间隔
+
+计数窗口：Count Window
+	滚动计数窗口
+	滑动计数窗口
+
+
+窗口分配器：window方法 
+可以用.window()来定义一个窗口，然后基于这个window去做一些聚合或者其他处理操作，注意：window方法必须在keyby之后才能用。
+Flink提供了更加简单的.window和.countWindow方法，用于定义时间窗口和计数窗口。
+
+
+
+窗口函数：定义了要对窗口中收集的数据做的计算操作。
+分为两类：
+	增量聚合函数
+	1）每条数据到来就进行计算，保持一个简单的状态
+	2）ReduceFunction（reduce算子，计算输出类型和输入是相同的） AggregateFunction（aggregate算子，计算输出类型可以和输入不同，使用更灵活）
+
+
+	全窗口函数，使用范围更广
+	1)先把窗口所有数据收集起来，等到计算的时候会遍历所有数据
+	2）ProcessWindowFunction（process算子，带有上下文信息，其中包含窗口信息），WindowFunction（apply，带有窗口信息）
+
+
+总结：
+
+分组后开窗：
+
+DataStream -keyBy-> KeyStream -window-> WindowStream -apply-> DataStream
+
+
+不分组直接开窗：
+
+DataStream -windowAll-> AllWindowStream -apply-> DataStream
+
+

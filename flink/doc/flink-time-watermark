@@ -1,0 +1,24 @@
+flink-time-watermark
+
+时间语义和WaterMark
+
+
+时间语义：
+Event Time：事件创建时间
+Ingestion Time：数据进入Flink的时间
+Processing Time：执行操作算子的本地系统时间，与机器相关
+
+哪种时间语义更重要？
+1）不同的时间含义有不同的应用场合
+2）我们往往更关心事件时间（Event Time）
+
+
+
+
+设置EventTime
+
+
+水印WaterMark
+
+
+WaterMark的传递、引入和设定

@@ -1,0 +1,55 @@
+elasticsearch-image
+
+
+1、下载
+docker pull docker.elastic.co/elasticsearch/elasticsearch:7.8.0
+docker pull elasticsearch:7.8.0
+
+2、执行
+docker run -d --name es -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" elasticsearch:7.8.0
+
+-name：elasticsearch服务名
+-p：端口
+-d ：后台启动
+-e ：参数
+121454ddad72：下载的镜像id
+
+3、配置跨域
+
+进入容器
+由于要进行配置，因此需要进入容器当中修改相应的配置信息。
+
+docker exec -it es /bin/sh
+或者docker exec -it 2ea77fbc3c54bff1c4e8c7a2096d6edf6c58f8850d25e801b6a27b75da35a569 /bin/sh
+
+# 显示文件
+ls
+结果如下：
+LICENSE.txt README.textile config lib modules
+NOTICE.txt bin data logs plugins
+
+# 进入配置文件夹
+cd config
+
+# 显示文件
+ls
+结果如下：
+elasticsearch.keystore ingest-geoip log4j2.properties roles.yml users_roles
+elasticsearch.yml jvm.options role_mapping.yml users
+
+# 修改配置文件
+vi elasticsearch.yml
+
+# 加入跨域配置
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+
+
+4、检索es中的数据
+命令方式：
+curl "localhost:9200/sensor/_search?pretty"
+浏览器输入：
+localhost:9200/sensor/_search?pretty
+
+
+

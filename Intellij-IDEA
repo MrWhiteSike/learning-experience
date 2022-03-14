@@ -37,3 +37,15 @@ shift + enter : 鼠标所在行插入新行
 
 option + command + <- / -> : 退回 / 前进到上一个操作的地方
 
+
+
+.var 快速代码补全
+
+psvm 快速创建main方法
+
+
+psf : public static final
+psfi: public static final int
+psfs: public static final String
+
+
