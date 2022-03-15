@@ -57,5 +57,13 @@
             <artifactId>mysql-connector-java</artifactId>
             <version>8.0.28</version>
         </dependency>
+
+        <!--RockDb backend-->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-statebackend-rocksdb_${scala.binary.version}</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+
     </dependencies>
 </project>
