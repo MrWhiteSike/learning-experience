@@ -74,7 +74,7 @@ Flink管理的状态：
 
 3、RocksDBStateBackend
 	将所有状态序列化后，存入本地的RocksDB中存储，速度慢，不会OOM
-
+	特点：访问速度一般，更好的容错保证和稳定
 
 
 

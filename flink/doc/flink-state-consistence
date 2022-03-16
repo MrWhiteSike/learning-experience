@@ -1,0 +1,104 @@
+flink-state-consistence
+
+状态一致性：
+对于流处理器内部来说，所谓的状态一致性，其实就是我们所说的计算结果要保证准确。
+一条数据不应该丢失，也不应该重复计算
+在遇到故障时可以恢复状态，恢复以后的重新计算，结果应该也是完成正确的。
+
+分类：
+1、AT-MOST-ONCE 最多一次
+	当任务故障时，最简单的做法就是什么都不干，既不恢复丢失的状态，也不重播丢失的数据。AT-MOST-ONCE 语义就是最多处理一次事件
+2、AT-LEAST-ONCE 至少一次
+	在大多数真实应用场景，我们不希望不丢失事件。这种类型的保障称为 at-least-once，意思是所有的事件都得到处理，而一些事件还可能被处理多次
+3、EXACTLY-ONCE 精确一次
+	恰好处理一次是最严格的保证，也是最难实现的。恰好处理一次语义不仅仅没有事件丢失，还意味着针对每一个数据，内部状态仅仅更新一次。
+
+
+一致性检查点
+
+端到端状态一致性
+1)内部保证 -- checkpoint
+2）source端 -- 可重设数据的读取位置
+3）sink端 -- 从故障恢复时，数据不会重复写入外部系统
+		1）幂等写入
+		2）事务写入
+
+所谓幂等操作：一个操作，可以重复执行多次，但只导致一次结果更改，也就是说，后面再重复执行就不起作用了。
+
+事务：具有原子性
+实现思想：构建的事务对应着checkpoint，等到checkpoint真正完成的时候，才把所有对应的结果写入sink系统中
+实现方式：
+	1、预写日志 WAL write ahead log
+	2、两阶段提交
+
+	预写日志：
+	把结果数据先当成状态保存，然后在收到checkpoint完成的通知时，一次性写入sink系统
+	简单易于实现，由于数据提前在状态后端中做了缓存，所以无论什么sink系统，都能用这种方式一批搞定
+	DataStream API 提供了一个模版类： GenericWriteAheadSink，
+	来实现这种事务性sink
+
+	缺点：增加系统延迟，写入不能严格精确
+
+	两阶段提交：
+	对于每个checkpoint，sink任务会启动一个事务，并将接下来所有接收的数据添加到事务里
+	然后将这些数据写入外部sink系统，但不提交它们，这时只是 预提交
+	当它收到checkpoint完成的通知时，它才正式提交事务，实现结果的真正写入。
+	这种方式真正实现了exactly-once，它需要一个提供事务支持的外部sinkk系统。Flink提供了TwoPhaseCommitSinkFunction接口
+
+
+端到端精确一次保证
+source端可重设 + 内部checkpoint + sink的两阶段提交
+
+
+Flink + Kafka 端到端状态一致性保证
+内部：利用checkpoint机制，把状态存盘，发生故障的时候可以恢复，保证内部的状态一致性。
+
+source ： kafka consumer 作为source，可以将偏移量保存下来，如果后续任务出现了故障。
+恢复的时候可以由连接器重置偏移量，重新消费数据，保证一致性。
+
+
+sink：kafka producer作为sink，采用两阶段提交sink，需要实现一个
+TwoPhaseCommitSinkFunction
+
+原理：
+1、JobManager 协调各个TaskManager进行checkpoint存储
+2、checkpoint保存在StateBackend中，默认StateBackend是内存级的，也可以改为文件级的进行持久化保存
+两阶段提交：
+3、当checkpoint启动时，JobManager会将检查点分界线（barrier）注入数据流
+4、barrier会在算子间传递下去
+5、每个算子任务遇到barrier就会对当前的状态做个快照，保存到状态后端
+6、checkpoint机制可以保证内部的状态一致性
+7、每个内部的transform任务遇到barrier时，都会把状态存到checkpoint里
+8、sink任务首先把数据写入外部kafka，这些数据都属于预提交的事务，遇到barrier时，把状态保存到状态后端，并开启新的预提交事务
+9、当所有算子任务的快照完成，也就是这次的checkpoint完成时，Job Manager会向所有任务发通知，确认这次checkpoint完成
+10、sink任务收到确认通知，正式提交之前的事务，kafka中未确认数据改为 已确认。
+
+
+
+梳理：
+1、第一条数据来之后，开启一个kafka事务，正常写入kafka分区日志但标记为未提交，这就是 预提交
+2、jobmanager触发checkpoint操作，barrier从source开始向下传递
+遇到barrier的算子将状态存入状态后端，并通知jobmanager
+3、sink连接器收到barrier，保存当前状态，存入checkpoint，通知jobmanager，并开启下一阶段的事务，用于提交下个检查点的数据
+4、jobmanager收到所有任务的通知，发出通知信息，表示checkpoint完成
+5、sink任务收到jobmanager的确认信息，正式提交这段时间的数据
+6、外部kafka关闭事务，提交的数据可以正常消费了
+
+注意：
+1、kafka需要开启事务
+2、开启事务的时间 > checkpoint 完成所需时间 
+3、设置kafka隔离级别，读未提交，下游不可以进行消费，避免重复消费
+
+
+
+
+
+
+
+
+
+
+
+
+
+
