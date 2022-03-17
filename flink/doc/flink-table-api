@@ -1,0 +1,93 @@
+flink-table-api
+
+
+Flink 对批处理和流处理，提供了统一的上层API
+
+Table API是一套内嵌在java和scala语言中的查询API，它允许以非常直观的方式组合来自一些关系运算符的查询。
+
+Flink SQL 支持基于实现了SQL标准的Apache Calcite
+
+
+
+基本程序结构：
+Table API和 SQL的程序结构，与流式处理的程序结构十分类似
+
+// 1、创建表的执行环境
+StreamTableEnvironment tableEnv = ... 
+
+// 2、创建一张表，用于读取数据
+tableEnv.connect(...).createTemporaryTable("inputTable");
+
+// 3、注册一张表，用于把计算结果输出
+tableEnv.connect(...).createTemporaryTable("outputTable");
+
+// 4、可以通过 table api 查询算子，得到一张结果表
+Table result = tableEnv.from("inputTable").select(...);
+
+// 5、也可以通过SQL查询语句，得到一张结果表
+Table sqlResult = tableEnv.sqlQuery("SELECT ... FROM inputTable ...");
+
+// 6、将结果表写入输出表中
+result.insertInto("outputTable");
+sqlResult.insertInto("outputTable");
+
+
+
+
+表 Table：
+
+表执行环境中，可以注册目录Catalog， 并可以基于Catalog注册表
+
+表是由一个 标识符 来指定的，由 3 部分组成：Catalog名，数据库名和表对象名
+
+表可以是常规的，也可以是虚拟的（视图view）
+
+常规表：一般可以用来描述外部数据，比如文件，数据库表或者消息队列的数据，也可以直接从DataStream转换而来
+
+视图view：可以从现有的表中创建，通常是table API 或者SQL查询的一个结果集
+
+
+
+创建表：
+TableEnvironment可以调用connect()方法，连接外部系统，并调用.createTemporaryTable()方法，在Catalog中注册表
+
+tableEnv
+  .connect(...)    //    定义表的数据来源，和外部系统建立连接
+  .withFormat(...)    //    定义数据格式化方法
+  .withSchema(...)    //    定义表结构
+  .createTemporaryTable("MyTable");    //    创建临时表
+
+
+创建表执行环境：
+创建表的执行环境，需要将flink流处理的执行环境传入
+StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+TableEnvironment是flink中集成Table API和SQL的核心概念，所有对表的操作都基于TableEnvironment
+1、注册Catalog
+2、在Catalog中注册表
+3、执行sql查询
+4、注册用户自定义函数UDF
+
+
+表的查询：
+Table API是集成在Scala和Java语言内的查询API
+
+Table API基于代表"表"的Table类，并提供一整套操作处理的方法API；这些方法会返回一个新的Table对象，表示对输入表应用转换操作的结果
+
+有些关系型转换操作，可以由多个方法调用组成，构成链式调用结构
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
