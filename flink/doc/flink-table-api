@@ -78,8 +78,18 @@ Table API基于代表"表"的Table类，并提供一整套操作处理的方法A
 
 
 
+更新模式：
+对于流式查询，需要声明如何在表和外部连接器之间执行转换
+与外部系统交换的消息类型，由更新模式（Update Mode） 指定
 
-
+1、追加（Append）模式
+	表只做插入操作，和外部连接器只交换插入（Insert）消息
+2、撤回（Retract）模式
+	表和外部连接器交换添加（Add）和撤回（Retract）消息
+	插入（Insert）操作 编码为Add消息，删除（Delete）编码为Retract消息，更新Update
+	编码为上一级的Retract和下一条的Add消息
+3、更新插入模式
+	更新和插入被编码为Upsert消息，删除编码为Delete消息
 
 
 

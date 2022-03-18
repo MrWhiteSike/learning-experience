@@ -1,0 +1,52 @@
+table2DataStream
+
+
+表转换为DataStream，这样自定义流处理或批处理程序就可以继续在Table API或 SQL查询的结果上运行了。
+
+将表 转换为DataStream时，需要指定生成的数据类型，即要将表的每一行转换成的数据类型。
+
+表作为流式查询的结果，是动态更新的。
+
+
+转换有两种转换模式在：追加（Append）模式和撤回（Retract）模式
+
+
+
+将DataStream 转换为表：
+
+tableEnv.fromDataStream（dataStream）
+
+默认转换后的table schema和DataStream中的字段定义一一对应，也可以单独指定出来。
+
+tableEnv.fromDataStream(dataStream, "id, timestamp as ts, temperature")
+
+
+创建临时视图：
+1、基于DataStream 创建临时视图：
+
+tableEnv.createTemporaryView("sensorView", dataStream);
+tableEnv.createTemporaryView("sensorView", dataStream, "id, timestamp as ts, temperature")
+
+
+2、基于table创建临时视图
+tableEnv.createTemporaryView("sensorView", sensorTable);
+
+
+
+
+
+查看执行计划：
+Table API提供了一种机制来解释计算表的逻辑和优化查询计划
+
+查看执行计划，可以通过TableEnvironment.explain(table) 方法 或
+TableEnvironment.explain()方法完成，返回一个字符串，描述三个计划
+
+1）要优化的逻辑查询计划
+2）优化后的逻辑查询计划
+3）实际执行计划
+
+
+
+
+
+

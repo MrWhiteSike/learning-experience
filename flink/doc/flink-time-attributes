@@ -1,0 +1,79 @@
+flink-time-attributes
+
+时间特性(Time Attributes)
+
+基于时间的操作（比如 Table API 和 SQL 中窗口操作），需要定义相关的时间语义和时间数据来源的信息
+Table 可以提供一个逻辑上的时间字段，用于在表处理程序中，指示时间和访问相应的时间戳
+时间属性，可以是每个表schema的一部分。一旦定义了时间属性，它就可以作为一个字段引用，并且可以在基于时间的操作中使用
+时间属性的行为类似于常规时间戳，可以访问，并且进行计算
+
+1、定义处理时间(Processing Time)
+
+处理时间语义下，允许表处理程序根据机器的本地时间生成结果。它是时间的最简单概念。它既不需要提取时间戳，也不需要生成 watermark
+	1）由DataStream转换成表时指定
+		在定义 Table Schema 期间，可以使用.proctime，指定字段名定义处理时间字段
+		这个proctime属性只能通过附加逻辑字段，来扩展物理schema。因此，只能在schema定义的末尾定义它
+		例如：
+		Table sensorTable = tableEnv.fromDataStream(dataStream,
+                                           "id, temperature, pt.proctime");
+	2）定义Table Schema时指定
+		.withSchema(new Schema()
+            .field("id", DataTypes.STRING())
+            .field("timestamp",DataTypes.BIGINT())
+            .field("temperature",DataTypes.DOUBLE())
+            .field("pt",DataTypes.TIMESTAMP(3))
+            .proctime()
+           )
+	3）创建表的DDL中定义
+		String sinkDDL = 
+		  "create table dataTable (" +
+		  " id varchar(20) not null, " +
+		  " ts bigint, " +
+		  " temperature double, " +
+		  " pt AS PROCTIME() " +
+		  " ) with (" +
+		  " 'connector.type' = 'filesystem', " +
+		  " 'connector.path' = '/sensor.txt', " +
+		  " 'format.type' = 'csv')";
+
+2、 定义事件事件(Event Time)
+	事件时间语义，允许表处理程序根据每个记录中包含的时间生成结果。这样即使在有乱序事件或者延迟事件时，也可以获得正确的结果。
+	为了处理无序事件，并区分流中的准时和迟到事件；Flink需要从事件数据中，提取时间戳，并用来推送事件时间的进展
+	定义事件事件，同样有三种方法：
+		1）由DataStream转换成表时指定
+			由DataStream转换成表时指定（推荐）
+			在DataStream转换成Table，使用.rowtime可以定义事件事件属性
+			例如：
+			// 将DataStream转换为Table，并指定时间字段
+			Table sensorTable = tableEnv.fromDataStream(dataStream,
+			                                           "id, timestamp.rowtime, temperature");
+			// 或者，直接追加时间字段
+			Table sensorTable = tableEnv.fromDataStream(dataStream,
+			                                          "id, temperature, timestamp, rt.rowtime");
+		2）定义Table Schema时指定
+			.withSchema(new Schema()
+            .field("id", DataTypes.STRING())
+            .field("timestamp",DataTypes.BIGINT())
+            .rowtime(
+              new Rowtime()
+              .timestampsFromField("timestamp") // 从字段中提取时间戳
+              .watermarksPeriodicBounded(1000) // watermark延迟1秒
+            )
+            .field("temperature",DataTypes.DOUBLE())
+           )
+		3）在创建表的DDL中定义
+			String sinkDDL = 
+			  "create table dataTable (" +
+			  " id varchar(20) not null, " +
+			  " ts bigint, " +
+			  " temperature double, " +
+			  " rt AS TO_TIMESTAMP( FROM_UNIXTIME(ts) ), " +
+			  " watermark for rt as rt - interval '1' second"
+			  " ) with (" +
+			  " 'connector.type' = 'filesystem', " +
+			  " 'connector.path' = '/sensor.txt', " +
+			  " 'format.type' = 'csv')";
+
+
+
+
