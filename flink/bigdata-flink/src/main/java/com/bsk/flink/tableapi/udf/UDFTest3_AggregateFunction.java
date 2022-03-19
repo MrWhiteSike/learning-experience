@@ -1,0 +1,80 @@
+package com.bsk.flink.tableapi.udf;
+
+import com.bsk.flink.api.beans.SensorReading;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
+import org.apache.flink.table.functions.AggregateFunction;
+import org.apache.flink.types.Row;
+import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.call;
+
+/**
+ * Created by baisike on 2022/3/19 12:14 下午
+ */
+public class UDFTest3_AggregateFunction {
+    public static void main(String[] args) throws Exception {
+
+        // 1.创建环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
+
+        // 2.读取数据
+        DataStreamSource<String> inputStream = env.readTextFile("/Users/baisike/learning-experience/flink/bigdata-flink/src/main/resources/sensor.txt");
+
+        // 3.转换数据
+        SingleOutputStreamOperator<SensorReading> dataStream = inputStream.map(line -> {
+            String[] fields = line.split(",");
+            return new SensorReading(fields[0], new Long(fields[1]), new Double(fields[2]));
+        });
+        // 4.将流转换成表
+        Table dataTable = tableEnv.fromDataStream(dataStream, "id, timestamp as ts, temperature as temp");
+
+        // 5.自定义聚合函数，求当前传感器的平均温度值
+        // 5.1 table api
+        // 需要在环境中注册UDF
+        tableEnv.createTemporarySystemFunction("avgTemp", AvgTemp.class);
+
+//        Table resultTable = dataTable.groupBy("id")
+//                .aggregate("avgTemp(temp) as avgTemp")
+//                .select("id, avgTemp");
+
+        Table resultTable = dataTable.groupBy($("id"))
+                .aggregate(call("avgTemp", $("temp")).as("avgTemp"))
+                .select($("id"), $("avgTemp"));
+
+
+        // 5.2 SQL
+        tableEnv.createTemporaryView("sensor", dataTable);
+        Table resultSqlTable = tableEnv.sqlQuery("select id, avgTemp(temp) from sensor group by id");
+
+        tableEnv.toRetractStream(resultTable, Row.class).print("result");
+        tableEnv.toRetractStream(resultSqlTable, Row.class).print("sql");
+
+
+        env.execute();
+    }
+
+    // 自定义的AggregateFunction
+    public static class AvgTemp extends AggregateFunction<Double, Tuple2<Double, Integer>>{
+        @Override
+        public Double getValue(Tuple2<Double, Integer> accumulator) {
+            return accumulator.f0 / accumulator.f1;
+        }
+
+        @Override
+        public Tuple2<Double, Integer> createAccumulator() {
+            return new Tuple2<>(0.0, 0);
+        }
+
+        public void accumulate(Tuple2<Double, Integer> accumulator, Double temp){
+            accumulator.f0 += temp;
+            accumulator.f1 += 1;
+        }
+    }
+
+}

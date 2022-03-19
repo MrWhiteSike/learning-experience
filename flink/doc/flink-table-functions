@@ -1,0 +1,171 @@
+flink-table-functions
+
+Flink Table API 和SQL为用户提供了一组用于数据转换的内置函数
+
+SQL中支持的很多函数，Flink Table & SQL都已经做了实现
+
+1、比较函数
+SQL：
+- value1 = value2
+- value1 > value2
+
+Table api:
+- any1 === any2
+- any1 > any2
+
+
+2、逻辑函数
+sql:
+- boolean1 or boolean2
+- boolean is false
+- not boolean
+
+Table api:
+- boolean1 || boolean2
+- boolean.isFalse
+- !boolean
+
+3、算术函数
+sql：
+- numeric1 + numeric2
+- power(numeric1, numeric2)
+
+table api:
+- numeric1 + numeric2
+- numeric1.power(numeric2)
+
+
+4、字符串函数
+SQL：
+- string1 || string2
+- upper(string)
+- char_length(string)
+
+table api:
+- string1 + string2
+- string.upperCase()
+- string.charLength()
+
+
+5、时间函数
+SQL:
+- date string
+- timestamp string
+- current_time
+- interval string range
+
+table api:
+- string.toDate
+- string.toTimestamp
+- currentTime()
+- numeric.days
+
+6、聚合函数
+SQL：
+- count(*)
+- sum(expression)
+- rank()
+- row_number()
+
+table api:
+- field.count
+- field.sum
+
+
+用户自定义函数(UDF)
+用户定义函数（User-defined Functions，UDF）是一个重要的特性，它们显著地扩展了查询的表达能力
+
+一些系统内置函数无法解决的需求，我们可以用UDF来自定义实现
+
+在大多数情况下，用户定义的函数必须先注册，然后才能在查询中使用
+
+函数通过调用 registerFunction() 方法在 TableEnvironment 中注册。当用户定义的函数被注册时，它被插入到 TableEnvironment 的函数目录中，这样Table API 或 SQL 解析器就可以识别并正确地解释它
+
+
+	1) 标量函数(Scalar Functions)
+
+	Scalar Funcion类似于map，一对一
+
+	Table Function类似flatMap，一对多
+	用户定义的标量函数，可以将0、1或多个标量值，映射到新的标量值
+
+	为了定义标量函数，必须在 org.apache.flink.table.functions 中扩展基类Scalar Function，并实现（一个或多个）求值（eval）方法
+
+	标量函数的行为由求值方法决定，求值方法必须public公开声明并命名为 eval
+
+	public static class HashCode extends ScalarFunction{
+        public int eval(@DataTypeHint(inputGroup = InputGroup.ANY) Object o){
+            return o.hashCode() * 10;
+        }
+    }
+
+
+	2) 表函数（Table Function）
+	用户定义的表函数，也可以将0、1或多个标量值作为输入参数；与标量函数不同的是，它可以返回任意数量的行作为输出，而不是单个值
+
+	为了定义一个表函数，必须扩展 org.apache.flink.table.functions 中的基类 TableFunction 并实现（一个或多个）求值方法
+
+	表函数的行为由其求值方法决定，求值方法必须是 public 的，并命名为 eval
+
+	@FunctionHint(output = @DataTypeHint("ROW<word STRING, length INT>"))
+	public static class SplitFunction extends TableFunction<Row> {
+
+	  public void eval(String str) {
+	    for (String s : str.split("_")) {
+	      // use collect(...) to emit a row
+	      collect(Row.of(s, s.length()));
+	    }
+	  }
+	}
+
+
+	3)聚合函数(Aggregate Functions)
+	聚合，多对一，类似前面的窗口聚合
+	用户自定义聚合函数（User-Defined Aggregate Functions，UDAGs）可以把一个表中的数据，聚合成一个标量值
+	用户定义的聚合函数，是通过继承 AggregateFunction 抽象类实现的
+
+	AggregationFunction要求必须实现的方法
+		createAccumulator()
+		accumulate()
+		getValue()
+	AggregateFunction 的工作原理如下：
+		首先，它需要一个累加器（Accumulator），用来保存聚合中间结果的数据结构；可以通过调用 createAccumulator() 方法创建空累加器
+		随后，对每个输入行调用函数的 accumulate() 方法来更新累加器
+		处理完所有行后，将调用函数的 getValue() 方法来计算并返回最终结果
+
+
+
+	4)表聚合函数
+	用户定义的表聚合函数（User-Defined Table Aggregate Functions，UDTAGGs），可以把一个表中数据，聚合为具有多行和多列的结果表
+	用户定义表聚合函数，是通过继承 TableAggregateFunction 抽象类来实现的
+
+	TableAggregateFunction 要求必须实现的方法：
+		createAccumulator()
+		accumulate()
+		emitValue()
+	TableAggregateFunction 的工作原理如下：
+	首先，它同样需要一个累加器（Accumulator），它是保存聚合中间结果的数据结构。通过调用 createAccumulator() 方法可以创建空累加器。
+	随后，对每个输入行调用函数的 accumulate() 方法来更新累加器。
+	处理完所有行后，将调用函数的 emitValue() 方法来计算并返回最终结果。
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
