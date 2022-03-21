@@ -11,6 +11,7 @@
     <modules>
         <module>HotBehaviorAnalysis</module>
         <module>NetworkFlowAnalysis</module>
+        <module>AppMarketingAnalysis</module>
     </modules>
 
     <properties>
