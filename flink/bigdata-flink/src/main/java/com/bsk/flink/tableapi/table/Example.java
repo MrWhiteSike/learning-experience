@@ -8,6 +8,10 @@ import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.types.Row;
 
+import java.net.URL;
+
+import static org.apache.flink.table.api.Expressions.$;
+
 /**
  * Created by baisike on 2022/3/17 11:35 上午
  */
@@ -16,7 +20,8 @@ public class Example {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
         // 读取数据
-        DataStreamSource<String> inputStream = env.readTextFile("/Users/baisike/learning-experience/flink/bigdata-flink/src/main/resources/sensor.txt");
+        URL resource = Example.class.getResource("/sensor.txt");
+        DataStreamSource<String> inputStream = env.readTextFile(resource.getPath());
         // 数据转换
         SingleOutputStreamOperator<SensorReading> dataStream = inputStream.map(line -> {
             String[] fields = line.split(",");
@@ -30,7 +35,8 @@ public class Example {
         Table table = tableEnvironment.fromDataStream(dataStream);
 
         //  调用table api 进行转换操作
-        Table resultTable = table.select("id, temperature").where("id = 'sensor_6'");
+//        Table resultTable = table.select("id, temperature").where("id = 'sensor_6'");
+        Table resultTable = table.select($("id"), $("temperature")).where($("id").isEqual("'sensor_6'"));
 
         // 执行SQL
         tableEnvironment.createTemporaryView("sensor", table);
