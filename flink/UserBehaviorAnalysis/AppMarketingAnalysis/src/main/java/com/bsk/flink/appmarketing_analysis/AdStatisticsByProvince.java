@@ -55,12 +55,12 @@ public class AdStatisticsByProvince {
                     }
                 }));
 
-        // 对同一个用户点击同一个广告的行为进行检测报警
+        // 1.对同一个用户点击同一个广告的行为进行检测报警
         SingleOutputStreamOperator<AdClickEvent> filterDataStream = adClickDataStream
                 .keyBy((KeySelector<AdClickEvent, Tuple2<Long, Long>>) adClickEvent -> new Tuple2<>(adClickEvent.getUserId(), adClickEvent.getAdId()))
                 .process(new FilterBlackListUser(100));
 
-        // 基于省份分组，开窗聚合
+        // 2.基于省份分组，开窗聚合
         SingleOutputStreamOperator<AdCountViewByProvince> aggStream = filterDataStream
                 .keyBy(AdClickEvent::getProvince)
                 .window(SlidingEventTimeWindows.of(Time.hours(1), Time.minutes(5)))
