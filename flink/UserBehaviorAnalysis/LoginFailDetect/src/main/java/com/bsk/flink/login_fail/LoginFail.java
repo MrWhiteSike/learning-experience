@@ -18,6 +18,7 @@ import org.apache.flink.util.Collector;
 
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Iterator;
 
 public class LoginFail {
     public static void main(String[] args) throws Exception {
@@ -52,12 +53,13 @@ public class LoginFail {
         env.execute("login fail job");
     }
 
-    // 登录失败次数达到上限时进行输出报警
-    public static class LoginFailDetectWarning extends KeyedProcessFunction<Long, LoginEvent, LoginFailWarning>{
+    // 简单实现：
+    // 登录失败次数在2秒内达到上限时进行输出报警：时效性不好，如果前一秒都已经达到报警上限，定时器还没触发，出现登录成功状态，不能正常报警
+    public static class LoginFailDetectWarning0 extends KeyedProcessFunction<Long, LoginEvent, LoginFailWarning>{
         // 定义属性，登录失败次数上限
         private Integer maxLoginFails;
 
-        public LoginFailDetectWarning(Integer maxLoginFails) {
+        public LoginFailDetectWarning0(Integer maxLoginFails) {
             this.maxLoginFails = maxLoginFails;
         }
 
@@ -111,4 +113,54 @@ public class LoginFail {
             timerTsState.clear();
         }
     }
+
+
+    // 时效性优化改进：
+    public static class LoginFailDetectWarning extends KeyedProcessFunction<Long, LoginEvent, LoginFailWarning> {
+        // 定义属性，登录失败次数上限
+        private Integer maxLoginFails;
+
+        public LoginFailDetectWarning(Integer maxLoginFails) {
+            this.maxLoginFails = maxLoginFails;
+        }
+
+        // 定义状态：保存2秒内所有的登录失败事件
+        ListState<LoginEvent> loginFailEventListState;
+
+        @Override
+        public void open(Configuration parameters) throws Exception {
+            loginFailEventListState = getRuntimeContext().getListState(new ListStateDescriptor<LoginEvent>("login-fail-list", LoginEvent.class));
+        }
+
+        // 以登录事件作为判断报警的触发条件，不再注册定时器
+        @Override
+        public void processElement(LoginEvent loginEvent, KeyedProcessFunction<Long, LoginEvent, LoginFailWarning>.Context context, Collector<LoginFailWarning> collector) throws Exception {
+            // 判断当前事件登录状态
+            if ("fail".equals(loginEvent.getLoginState())){
+                // 1. 如果是登录失败，获取状态中之前的登录失败事件，继续判断是否已有失败事件
+                Iterator<LoginEvent> iterator = loginFailEventListState.get().iterator();
+                if (iterator.hasNext()){
+                    // 1.1 如果已经有登录失败事件，继续判断时间戳是否在2秒之内
+                    // 获取已有的登录失败事件
+                    LoginEvent firstFailEvent = iterator.next();
+                    if (loginEvent.getTimestamp() - firstFailEvent.getTimestamp() <= 2){
+                        // 1.1.1 如果在2秒之内，输出报警
+                        collector.collect(new LoginFailWarning(loginEvent.getUserId(), firstFailEvent.getTimestamp(), loginEvent.getTimestamp(), "login fail 2 times in 2s"));
+                    }
+
+                    // 不管报不报警，这次都已经处理完毕，直接更新状态
+                    loginFailEventListState.clear();
+                    loginFailEventListState.add(loginEvent);
+                }else {
+                    // 1.2 如果没有登录失败事件，直接将当前事件存入ListState
+                    loginFailEventListState.add(loginEvent);
+                }
+            }else {
+                // 2. 如果是登录成功，直接清空状态
+                loginFailEventListState.clear();
+            }
+
+        }
+    }
+
 }
