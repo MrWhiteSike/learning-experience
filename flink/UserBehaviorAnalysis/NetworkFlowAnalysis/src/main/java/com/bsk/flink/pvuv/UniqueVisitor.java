@@ -24,7 +24,7 @@ public class UniqueVisitor {
     public static void main(String[] args) throws Exception {
         // 1.创建环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setParallelism(1);
+        env.setParallelism(4);
 
         // 2.读取数据
         URL resource = PageView.class.getResource("/UserBehavior.csv");
