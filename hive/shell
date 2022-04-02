@@ -1,0 +1,128 @@
+shell
+
+查看所有进程：
+1、
+jps
+2、查看所有的进程
+ps -ef 
+
+查看某一个进程
+ps -ef | grep -v grep | grep -i serverName | awk '{print $2}'
+
+说明：
+| 管道，向下游传递
+grep 过滤
+-v 去掉某些服务
+-i 保留某些服务
+awk 按空格分词
+$2 分词后的第二个位置的单词
+
+
+
+查看内存资源使用情况：
+1、top
+是Linux下常用的性能分析工具，能够实时显示系统中各个进程的资源占用状态，可以直接使用top命令后，查看%MEM内容
+可以选择按进程查看（top -d 进程id）或者按用户查看（top -u 用户名）
+
+内容解释：
+pid：进程ID
+USER：进程所有者
+PR：进程的优先级别，越小越优先执行
+Ninice：值
+VIRT：进程占用的虚拟内存
+RES：进程占用的物理内存
+SHR：进程使用的共享内存
+S：进程的状态。 S表示休眠，R表示正在运行，Z表示僵死状态，N表示该进程优先级为负数
+%CPU：进程占用的CPU使用率
+%MEM：进程使用的物理内存和总内存的百分比
+TIME+ ：该进程启动后占用的总的CPU时间，即占用CPU使用时间的累加值
+COMMAND：进程启动命令名称
+
+2、free -h
+从整体上查看系统内存占用情况
+
+3、pmap
+可以根据进程查看进程相关信息占用的内存情况，进程号可以通过ps查看
+pmap -d pid
+
+扩展格式和设备：
+Address：映像起始地址
+Kbytes：映像大小
+RSS：驻留集大小
+Dirty：脏页大小
+Mode：映像权限 r=read，w=write，x=execute，s=shared，p=private（copy on write）
+Mapping：映像支持文件，anon：已分配内存，stack：程序堆栈
+Offset：文件偏移
+Device：设备名
+
+
+
+查看磁盘空间的：
+1、
+df -h
+df命令是linux系统以磁盘分区为单位来查看文件系统的命令。
+
+df 不带参数的效果：
+第一列：文件系统
+第二列：容量
+第三列：已用容量
+第四列：可用容量
+第五列：已用容量%
+第六列：挂载点
+
+-h：以可读性较高的方式来显示信息
+
+2、
+du 
+查看当前指定文件或者目录（会递归显示子目录）占用磁盘空间大小，还是和df命令有一些区别的。
+
+不带参数的效果：
+第一列：占用磁盘空间的大小
+第二列：文件或者目录
+
+-h ： 以K、M、G为单位，提高信息的可读性
+
+
+
+获取端口号：
+1、获取所有的端口号
+netstat -nltp
+2、获取某个端口号
+netstat -nltp | grep -i 8080
+
+netstat -nltp | grep -i 8080 | awk '{print $7}' | cut -d '/' -f 1
+
+说明：
+cut -d '/' -f 1 ： 以/为分隔符进行切分，取第一个值
+
+
+
+查看磁盘IO读写 yum install iotop：
+iotop
+iotop -o: 直接查看比较高的磁盘读写程序
+
+
+
+查看端口占用情况：
+netstat -tunlp | grep 端口号 
+
+查看报告系统运行时长以及平均负载：
+uptime
+
+
+查看进程：
+ps aux
+
+
+shell常用工具：
+awk sed cut sort
+
+
+
+cd -： 回到上次跳转目录
+
+
+
+
+
+
