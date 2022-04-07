@@ -296,6 +296,13 @@ cluster by除了具有distribute by 的功能还具有sort by的功能。但是
 Hive中的分区就是分目录，把一个大的数据集根据业务需要分割成小的数据集。
 在查询时通过where子句中的表达式选择查询所需要的指定分区。这样的查询效率会提高很多。
 
+分区字段和其他字段不同：
+分区字段是分区目录，不在数据文件中，而是在元数据中
+其他字段存储在数据文件中。
+
+查询数据指定分区，可以提高查询效率。
+
+
 创建分区表：
 例子，
 create table dept_par(deptno int, dname string, loc string)
@@ -420,9 +427,9 @@ select * from stu_buck tablesample(bucket 1 out of 4 on id);
 函数：
 
 三种：
-udf 一进一出
-udaf 多进一出
-udtf 一进多出
+udf 一进一出  拼接; 可以任意嵌套的
+udaf 多进一出 聚合
+udtf 一进多出 拆分
 
 多：指输入数据的行数
 
@@ -479,10 +486,307 @@ group by dept_id;
 
 
 3.行转列
+concat(string A/col, string B/col,...):
+返回输入字符串连接后的结果，支持任意个输入字符串；
+select concat('a','-','b','-','c');  ==> a-b-c
+select concat(deptno,'-',dname) from dept;
+
+concat_ws(separator,str1|Array[string],str2,...);
+它是一个特殊形式的concat(), 第一个参数为剩余参数间的分隔符。
+分隔符可以是与剩余参数一样的字符串。
+如果分隔符是null，返回值也将是null。
+这个函数会跳过分隔符参数后的任何null和空字符串。分隔符将被加到被连接的字符串之间。
+UDF 
+
+concat_ws('-','a','b','c'); ==> a-b-c
+select concat_ws('-',friends) from test;
+
+collect_set(col)：函数只接受基本数据类型，主要作用是将某字段的值进行去重汇总，
+产生Array类型字段。这是一个聚合函数。多进一出。UDAF 
+collect_list(col): 不去重，产生Array类型字段。
+
+例子：
+create table person_info(
+name string,
+constellation string,
+blood_type string
+)
+row format delimited fields terminated by '\t';
+
+数据:
+张三 	白羊座 	  	A
+李四		射手座 		A
+王五 	白羊座 		B
+凤姐 	白羊座 		A
+御姐 	射手座 		A
+萝莉 	白羊座 		B
+
+需求：把星座和血型一样的人归类到一起
+结果如下：
+射手座,A   李四|御姐
+白羊座,A   张三|凤姐
+白羊座,B   王五|萝莉
+
+第一步：将星座和血型拼接在一起
+select
+	concat(constellation,",",blood_type) con_blood,
+	name
+from person_info; t1
+
+第二步：聚合相同星座血型的人的姓名
+select
+	con_blood,
+	collect_set(name) name_arr
+from 
+(select
+	concat(constellation,",",blood_type) con_blood,
+	name
+from person_info)t1 
+group by con_blood;t2
+
+第三步：将相同星座血型的人的姓名进行拼接
+select 
+	con_blood,
+	concat_ws("|",name_arr)
+from
+(select
+	con_blood,
+	collect_set(name) name_arr
+from 
+(select
+	concat(constellation,",",blood_type) con_blood,
+	name
+from person_info)t1 
+group by con_blood)t2;
+
+
+合并：由于UDF函数可以任意嵌套。
+将第二步和第三步进行合并：
+
+select
+	con_blood,
+	concat_ws('|',collect_set(name))
+from 
+(select
+	concat(constellation,",",blood_type) con_blood,
+	name
+from person_info)t1 
+group by con_blood;
 
 4.列转行
+explode(col): 将hive一列中复杂的Array或者Map结构拆分成多行。
+属于UDTF函数，
+lateral view
+
+用法：
+lateral view udtf(expression) tableAlias as columnAlias
+
+解释：用于和split，explode等UDTF一起使用，它能够将一列数据拆分成多行数据，在此基础上
+可以对拆分后的数据进行聚合。
+
+例子：
+create table movie_info(
+movie string,
+category string)
+row format delimited fields terminated by '\t';
+
+数据：
+《白日追凶》 悬疑,动作,科幻，剧情
+《威龙》 悬疑，警匪，动作，心理，剧情
+《战狼 2》 战争，动作，灾难
+
+select split(category,',') from movie_info;
+
+select movie,explode(split(category,',')) from movie_info; 这个语句报错，movie行数和炸裂的行数不同
+
+解决方案：侧写 lateral view 语句
+需要跟原表中的字段进行关联的时候，需要对表进行侧写炸裂：
+select 
+	movie,
+	category_name 
+from movie_info
+lateral view
+explode(split(category,',')) movie_info_tmp as category_name;
+
+不需要跟原表中的字段进行关联的时候，直接进行炸裂就可以：
+select 
+	explode(split(category,',')) 
+from movie_info；
+
 
 5.窗口函数（开窗函数）
+over() : 指定分析函数工作的数据窗口大小，这个数据窗口大小可能会随着行的变化而变化。
+是在group by语句之后生效。
+
+current row : 当前行
+n preceding：往前n行数据
+n following：往后n行数据
+unbounded：起点
+	unbounded preceding：表示从前面的起点
+	unbounded following：表示到后面的终点
+lag（col，n，default_val）：往前第n行数据
+lead（col，n，default_val）： 往后第n行数据
+ntile（n）：把有序窗口的行分发到指定数据的组中，各个组有编号，编号从1开始，对于每一行，ntile
+返回此行所属的组的编号。
+注意：n必须为int类型
+
+例子：消费流水表
+name    orderdate   cost 
+jack,2020-01-01,10
+tony,2020-01-02,15
+jack,2020-02-03,23
+tony,2020-01-04,29
+jack,2020-01-05,46
+jack,2020-04-06,42
+tony,2020-01-07,50
+jack,2020-01-08,55
+mart,2020-04-08,62
+mart,2020-04-09,68
+neil,2020-05-10,12
+mart,2020-04-11,75
+neil,2020-06-12,80
+mart,2020-04-13,94
+
+需求1：查询在2020年4月份购买过的顾客以及总人数
+
+分析，首先通过substring截取时间字段提取出2020-04的数据
+select 
+	* 
+from business
+where substring(orderdate,0,7) = '2020-04';
+
+然后获取顾客名： 可以使用distinct（name）进行去重，也可以使用group by进行去重
+
+select 
+  distinct(name)
+from business
+where substring(orderdate,0,7) = '2020-04';
+或者
+select 
+ 	name
+from business
+where substring(orderdate,0,7) = '2020-04'
+group by name;
+
+最后取总人数：
+select 
+  count(distinct(name))
+from business
+where substring(orderdate,0,7) = '2020-04';
+或者
+select
+	count(*)
+from
+(select 
+ 	name
+from business
+where substring(orderdate,0,7) = '2020-04'
+group by name)t1;
+
+但是顾客名和总人数不在一个语句中输出，怎么办？
+select 
+ 	name,
+ 	count(*)
+from business
+where substring(orderdate,0,7) = '2020-04'
+group by name; 
+==>
+jack 1
+mart 4
+这条语句的结果是我们需要的结果吗？
+这个只是求出了顾客名分组后，对分组后的名字出现的次数进行统计，显然不满足现在的需求。
+
+解决方案： 添加over()开窗函数
+select 
+ 	name,
+ 	count(*) over()
+from business
+where substring(orderdate,0,7) = '2020-04'
+group by name; 
+
+==>
+jack 2
+mart 2
+分析上述的语句：
+在group by 分组后得到的数据集t1的每一条数据开了一个窗口，窗口中什么也没有，就是对t1这个数据集的全表数据进行count操作。
+
+
+select 
+ 	name,
+ 	count(*)
+from business;
+这条语句在hive中会报错，在MySQL中可以执行 结果为jack，14
+
+select 
+ 	name,
+ 	count(*) over()
+from business;
+这条语句在hive中可以正常执行，类似于侧写的效果
+==> 14条数据
+jack 14
+...
+mart 14
+
+over()  和 group by 的区别：
+over() 其中内容不写的话，就用全表作为数据集，为每一条数据开了一个窗口。
+
+
+
+需求2：查询顾客的购买明细以及月购买总额
+
+// 查询顾客的购买明细以及购买总额
+select
+	name,
+	orderdate,
+	cost,
+	sum(cost) over(partition by name) -- 开窗后对顾客进行分组，分组后对购买金额进行sum聚合
+from business;
+
+// 查询顾客的购买明细以及顾客月购买总额
+select
+	name,
+	orderdate,
+	cost,
+	sum(cost) over(partition by name,month(orderdate)) -- 开窗后，对顾客以及月份进行分组，分组后对购买金额进行sum聚合
+from business;
+
+// 查询顾客的购买明细以及月购买总额(按月进行开窗分组)
+select
+	name,
+	orderdate,
+	cost,
+	sum(cost) over(partition by month(orderdate)) -- 开窗后，对月份进行分组，分组后对购买金额进行sum聚合
+from business;
+
+
+需求3：上述场景，将每个顾客的cost按照日期进行累积
+方式1：
+select
+	name,
+	orderdate,
+	cost,
+	sum(cost) over(partition by name order by orderdate)-- partition by一个字段，order by一个字段情况默认是rows between unbounded preceding and current row
+from business;
+
+
+方式2：这种方式和方式1等效
+select
+	name,
+	orderdate,
+	cost,
+	sum(cost) over(partition by name order by orderdate rows between unbounded preceding and current row)
+from business;
+
+// 求当前行的前1行和后1行的数据三条数据进行聚合
+select
+	name,
+	orderdate,
+	cost,
+	sum(cost) over(partition by name order by orderdate rows between 1 preceding and 1 following)
+from business;
+
+partition by 在开窗函数中，指定了窗口的范围。order by 是在窗口范围内进行排序，如果不加partition by，窗口范围就是整张表的数据集。
+
 
 6.rank
 
