@@ -1,0 +1,93 @@
+hive-DML
+
+DML数据操作
+
+查询语句属于DML
+
+1.数据导入
+1.1向表中装载数据：Load
+语法：
+load data [local] inpath '数据的path' [overwrite] into table table_name [partition (partcol1=val1,...)];
+
+说明：
+load data ： 表示加载数据
+local：表示从本地加载数据到hive表，否则从HDFS加载数据到hive表
+inpath：表示加载数据的路径
+overwrite：表示覆盖表中已有数据，否则表示追加
+into table：表示加载到那张表
+table_name：表示具体的表
+partition：表示上传到指定分区
+
+
+注意：
+select count(*)
+insert 语句： 会走MR任务，numFiles 和 numRows 两个属性值会进行更新
+
+通过hdfs 的put命令：不会走MR任务，numFiles 和 numRows 两个属性值不会更新
+
+load data语句：会走MR任务，numFiles 和 numRows 两个属性值，只有numFiles会进行更新，numRows 不会进行更新
+
+load hdfs 上的数据时，是直接mv hdfs上的文件数据，修改namenode上的元数据即可，速度比较快。
+
+
+1.2 通过查询语句向表中插入数据
+insert overwrite table student_par 
+select id,name from student where month='202009';
+
+insert into :以追加数据的方式插入到表或者分区，原有数据不会删除
+insert overwrite：会覆盖表中已存在的数据。
+
+注意：insert不支持插入部分字段
+多表（多分区）插入模式，根据多张表查询结果：
+from student
+insert overwrite table student_par partition(month='202007')
+select id, name where month = '202007'
+insert overwrite table student_par partition(month='202006')
+select id, name where month = '202006';
+
+1.3 查询语句中创建表并加载数据(as select)
+create table if not exists student1
+as select id,name from student;
+
+1.4 创建表时通过location指定加载数据路径
+create external table if not exists student2(id int, name string) row format delimited fields terminated by '\t'
+location '/student';
+
+1.5 import数据到指定hive表中
+
+注意：先用export导出后，再将数据导入
+采用的是第三方框架实现导入数据
+import table student3 from '/student3';
+
+
+2.数据导出
+
+2.1 将查询的结果格式化导出到本地
+insert overwrite local directory '目录路径'
+row format delimited fields terminated by ','
+select * from student;
+
+
+2.2 将查询的结果格式化导出hdfs上
+insert overwrite directory '目录路径'
+row format delimited fields terminated by ','
+select * from student;
+
+2.3 Hadoop 命令导出到本地
+dfs -get 文件地址;
+
+2.4 hive shell 命令
+hive -e 'select * from default.student;' > hdfs_filepath;
+
+2.5 Export 导出到hdfs上
+export table default.student to 'hdfs_file_path';
+export 和 import主要用于两个Hadoop平台集群之间hive 表迁移。
+
+
+
+清除表中的数据：Truncate
+truncate table student;
+注意：truncate只能删除管理表中数据，不能删除外部表中数据
+
+
+

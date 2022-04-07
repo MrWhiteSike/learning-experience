@@ -1,0 +1,50 @@
+hive-database
+
+1.if not exists
+create database if not exists hive库名;
+
+2.location
+create database if not exists 库名 location hdfs地址;
+
+
+create database if not exists hive location '/hive1';
+
+
+显示数据库：
+show databases;
+
+过滤显示查询的数据库：
+show databases like 'db_hive*';
+
+查看数据库详情：
+desc database db_hive;
+
+desc database extended db_hive;
+
+
+切换当前数据库：
+use db_hive;
+
+
+修改数据库：
+alter database db_hive set dpproperties("createtime"="20200509")
+
+
+ 删除数据库：
+ drop database db_hive;
+
+ drop database if exists db_hive;
+ 采用cascade命令，强制删除：
+ drop database db_hive cascade;
+ 
+
+
+
+
+
+
+
+
+
+
+

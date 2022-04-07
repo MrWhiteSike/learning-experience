@@ -1,0 +1,41 @@
+hive-data
+
+
+Hive数据类型
+
+基本数据类型
+hive           	Java
+tinyint       	byte
+smallint     	short
+int				int
+bigint			long
+boolean			boolean
+float			float
+double			double
+string			string
+timestamp		
+binany
+
+
+
+对于hive的string类型相当于数据库的varchar类型，该类型是一个可变的字符串，不过它不能声明其中最多能存储多少个字符，理论上它可以存储2GB的字符串
+
+
+集合数据类型：
+
+Struct
+可以通过 . 符号访问元素内容。
+struct<street:string,city:string>
+封装了一个命名字段集合，复杂数据类型允许任意层次的嵌套。
+
+map
+是一组键值对元祖集合，使用数据表示法可以访问数据。
+可以通过字段名['key']获取key对应的元素值
+map<String,int>
+
+array
+数组是一组具有相同类型和名称的变量的集合。这些变量称为数组的元素，每个数组元素都有一个编号，编号从零开始。
+第i个元素可以通过 数组名[i] 进行引用。
+array<string>
+
+
