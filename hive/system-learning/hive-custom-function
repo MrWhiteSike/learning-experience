@@ -1,0 +1,81 @@
+hive-custom-function
+
+
+编程步骤：
+1）继承Hive提供的类
+ 	org.apache.hadoop.hive.ql.udf.generic.GenericUDF
+ 	org.apache.hadoop.hive.ql.udf.generic.GenericUDAF
+ 	org.apache.hadoop.hive.ql.udf.generic.GenericUDTF
+2) 实现类中的抽象方法
+3）在hive的命令行窗口创建函数
+
+添加jar
+add jar linux_jar_path
+创建function
+create [temporary] function [dbname.]function_name as class_name;
+
+4) 在hive的命令行窗口删除函数
+drop [temporary] function [if exists] [dbname.]function_name; 
+
+
+自定义UDF函数：
+需求：自定义一个udf实现计算给定字符串的长度
+select my_len("abcd");
+4
+
+1.创建一个maven工程hive
+2.导入依赖
+<dependencies>
+    <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-exec</artifactId>
+        <version>3.1.2</version>
+    </dependency>
+</dependencies>
+3.创建一个类
+import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
+
+public class MyUDF extends GenericUDF {
+
+    // 校验数据参数个数和类型等
+    @Override
+    public ObjectInspector initialize(ObjectInspector[] objectInspectors) throws UDFArgumentException {
+        if (objectInspectors.length != 1){
+            throw new UDFArgumentException("参数个数不为1");
+        }
+        return PrimitiveObjectInspectorFactory.javaIntObjectInspector;
+    }
+
+    // 处理数据
+    @Override
+    public Object evaluate(DeferredObject[] deferredObjects) throws HiveException {
+        // 1.取出输入数据
+        String input = deferredObjects[0].toString();
+        // 2.判断输入数据是否为null，防止null指针异常
+        if (input == null){
+            return 0;
+        }
+        // 3.返回输入数据的长度
+        return input.length();
+    }
+
+    @Override
+    public String getDisplayString(String[] strings) {
+        return "";
+    }
+}
+
+4.打成jar包上传到服务器/opt/module/data/myudf.jar
+5.将jar包添加到hive的classpath
+hive > add jar /opt/module/data/myudf.jar
+6.创建临时函数与开发好的Java class关联
+hive > create temporary function my_len as "com.bsk.hive.MyUDF"
+7.即可在hql中使用自定义的函数
+hive > select my_len(name) name_len from emp;
+
+
+

@@ -4,7 +4,10 @@ mysql-image
 podman/docker pull mysql:8.0.28
 
 2、执行
-docker/podman run --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123456 -d mysql:8.0.28
+docker run --name mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123456 -d mysql:8.0.28
+
+如果本地3306端口被占用，可以通过修改映射本地其他端口进行启动
+docker run --name mysql -p 3309:3306 -e MYSQL_ROOT_PASSWORD=123456 -d mysql:8.0.28
 
 3、在shell中访问mysql
 docker/podman exec -it mysql bash

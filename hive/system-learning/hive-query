@@ -788,23 +788,232 @@ from business;
 partition by 在开窗函数中，指定了窗口的范围。order by 是在窗口范围内进行排序，如果不加partition by，窗口范围就是整张表的数据集。
 
 
+需求4：查询每个顾客上次的购买时间
+
+第三个参数不给，第一条的数据前一条没有数据，就是null
+select
+	name,
+	orderdate,
+	lag(orderdate,1) over(partition by name order by orderdate)
+from business;
+
+可以给一个默认值
+select
+	name,
+	orderdate,
+	lag(orderdate,1,'1970-01-01') over(partition by name order by orderdate)
+from business;
+也可以用自己的数据进行填充
+select
+	name,
+	orderdate,
+	lag(orderdate,1,orderdate) over(partition by name order by orderdate)
+from business;
+
+lag :上面的一行往下移
+lead：下面的一行往上移，第三参数 不给，最后一条数据null，可以给一个默认值；也可以用自己的数据进行填充
+select
+	name,
+	orderdate,
+	lead(orderdate,1,orderdate) over(partition by name order by orderdate)
+from business;
+
+
+需求5：查询前20%时间的订单信息
+
+// 第一步，先进行order by排序，然后分组
+select
+	name,
+	orderdate,
+	cost,
+	ntile(5) over(order by orderdate) groupId
+from business; t1
+
+
+// 第二步，把第一组的数据拿到，就是前20%
+select
+	name,
+	orderdate,
+	cost
+from 
+(select
+	name,
+	orderdate,
+	cost,
+	ntile(5) over(order by orderdate) groupId
+from business)t1
+where groupId = 1;
+
+
 6.rank
+不能单独使用，后跟over窗口函数使用。
+
+rank() 排序相同时会重复，总数不会变
+dense_rank() 排序相同时会重复，总数会减少
+row_number() 会根据顺序计算
+
+
+create table score(
+name string,
+subject string,
+score int)
+row format delimited fields terminated by '\t';
+
+数据：
+张三  语文   87
+张三  数学   95
+张三  英语   68
+李四  语文   94
+李四  数学   56
+李四  英语   84
+王五  语文   64
+王五  数学   86
+王五  英语   84
+孙六  语文   65
+孙六  数学   85
+孙六  英语   78
+
+// 对score进行排序，rank() 获取排名，不是密集型的，比如：两个排名都是第 6，后面的数据排名就是 8
+select 
+	*,
+	rank() over(order by score)
+from score;
+
+// 密集型的：比如 两个排名都是第 6 ，后面排名就是紧跟着 7 
+select 
+	*,
+	dense_rank() over(order by score)
+from score;
+
+// 就是求数据行号
+select 
+	*,
+	row_number() over(order by score)
+from score;
+
+
+需求1:求每个学科成绩top3 属于分组取topN
+
+方式1：利用over 开窗函数实现
+
+// 第一步，就是对学科进行分组，然后对分组的学生成绩进行排名(三个函数都可以使用进行排名)
+select 
+	*,
+	rank() over(partition by subject order by score) rk,
+	dense_rank() over(partition by subject order by score) drk,
+	row_number() over(partition by subject order by score) rbk
+from score; t1
+
+// 第二步：子查询将top3取出
+select
+	name,
+	subject,
+	score
+from
+	(select 
+	*,
+	rank() over(partition by subject order by score) rk
+from score)t1
+where rk <= 3;
+
+方式2：不使用over开窗函数实现
+自己跟自己关联，关联条件是学科相同，
+分数进行比较，分数最高的join后的条数是最多的，然后用子查询将topn取出。
 
 7.其他常用函数
 
 
+常用日期函数：
+unix_timestamp：返回当前或者指定时间的时间戳
+select unix_timestamp();--求当前时间戳
+select unix_timestamp("2020-08-28","yyyy-MM-dd"); -- 求某个具体时间的时间戳
+
+from_unixtime:将时间戳转为日期格式
+select from_unixtime(1649419690);
+===> 2022-04-08 20:08:10
+
+current_date: 当前日期
+SELECT CURRENT_DATE; 2022-04-08
+
+current_timestamp: 当前的日期+时间
+SELECT CURRENT_TIMESTAMP; 2022-04-08 20:18:41
+
+to_date: 抽取日期部分
+select to_date('2022-04-08 20:18:41'); 2022-04-08
 
 
+year：获取年
+select year('2022-04-08 20:18:41'); 2022
+month：获取月
+select month('2022-04-08 20:18:41'); 4
+day：获取日
+select day('2022-04-08 20:18:41'); 8
+hour：获取时
+select hour('2022-04-08 20:18:41'); 20
+minute：获取分
+select minute('2022-04-08 20:18:41'); 18
+second：获取秒
+select second('2022-04-08 20:18:41'); 41
 
 
+weekofyear：当前时间是一年中的第几周
+select weekofyear('2022-04-08 20:18:41'); 14
+dayofmonth：当前时间是一个月中的第几天
+select dayofmonth('2022-04-08 20:18:41');8
+
+months_between : 两个日期间的月份
+select months_between('2022-04-08','2022-06-08'); -2
 
 
+add_months: 日期加减月
+select add_months('2022-04-08',3);  2022-07-08
+select add_months('2022-04-08',-3);  2022-01-08
+
+datediff：两个日期相差的天数
+select DATEDIFF('2022-04-18','2022-04-08'); 10 前-后
+
+date_add: 日期加天数
+select date_add('2022-04-18',INTERVAL 3 day);  2022-04-21
+date_sub: 日期减天数
+select date_sub('2022-04-18',INTERVAL 3 day);  2022-04-15
 
 
+last_day：日期的当月的最后一天
+select LAST_DAY('2022-04-18'); 2022-04-30
+
+date_format: 格式化日期
+select DATE_FORMAT('2022-04-08 20:18:41','yyyy/MM/dd HH:hh:ss'); 2022/04/08 20:18:41
 
 
+常用取整函数：
+round：四舍五入
+select round(3.14); 3
+ceil：向上取整
+select ceil(3.14); 4
+floor：向下取整
+select floor(3.14); 3
 
 
+常用字符串操作函数：
+upper：转大写
+lower：转小写
+length：长度
+trim：前后去空格
+lpad：向左补齐，到指定长度
+rpad：向右补齐，到指定长度select 
+select upper('low'); # LOW
+select lower('UPPER'); # upper
+select length('length'); # 6
+select trim(' trim '); # trim
+select lpad('lpad',8,'b'); # bbbblpad
+select rpad('lpad',8,'b'); # lpadbbbb
+regexp_replace:使用正则表达式匹配目标字符串，匹配成功后替换
+select regexp_replace('2022/04/30','/','-'); # 2022-04-30
 
 
-
+集合操作：
+size:集合中元素的个数
+map_keys: 返回map中的key
+map_values: 返回map中的value
+array_contains : 判断array中是否包含某个元素
+sort_array: 将array中的元素排序
