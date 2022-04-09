@@ -1,0 +1,41 @@
+hive-compress
+
+开启Reduce输出阶段压缩
+
+当hive将输出写入到表中时，输出内容同样可以进行压缩
+属性hive.exec.compress.output控制着这个功能。
+用户可能需要保持默认设置文件中的默认值false，
+这样默认的输出就是非压缩的纯文本文件了。
+用户可以通过在查询语句或者执行脚本中设置这个值为true，
+来开启输出结果压缩功能。
+
+1.开启hive最终输出数据压缩功能：
+hive > set hive.exec.compress.output=true;
+
+2.开启MapReduce最终输出数据压缩
+hive > set mapreduce.output.fileoutputformat.compress=true;
+
+3.设置MapReduce最终数据输出压缩方式
+hive > set mapreduce.output.fileoutputformat.compress.codec=
+org.apache.hadoop.io.compress.SnappyCodec;
+
+4.设置MapReduce最终数据输出压缩为块压缩
+hive > set mapreduce.output.fileoutputformat.compress.type=BLOCK;
+
+5.测试
+
+
+文件存储格式：
+hive支持的存储数据的格式主要有：
+TEXTFILE,SEQUENCEFILE 行存
+,ORC,PARQUET. 列存
+
+
+存储文件的对比总结：
+ORC > PARQUET > TEXTFILE 
+
+Hive中主流使用ORC文件格式，snappy压缩格式
+
+存储文件的查询速度总结：查询速度相近
+
+

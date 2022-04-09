@@ -1,0 +1,200 @@
+hive-best
+
+执行计划：Explain
+
+语法：
+explain [extended | dependency | authorization] query
+
+Fetch 抓取
+指Hive找那个对某些情况的查询可以不必使用MR计算。
+在hive-default.xml.template文件中hive.fetch.task.conversion
+默认是more，老版本hive默认是minimal，该属性修改为more后，在全局查找、
+字段查找、limit查找等都不走MapReduce。
+
+本地模式：
+数据小的时候。我们不去使用yarn去调度任务，而是在本地去执行任务。
+少了与yarn进行通信。
+
+
+表的优化：
+
+1、小表大表join（MapJoin）
+
+开启mapjoin参数设置：
+set hive.auto.couvert.join = true; 默认为true
+大表小表的阈值设置（默认25M以下认为是小表）
+set hive.mapjoin.smalltable.filesize=25000000;
+
+hive version3之前：
+小表 join 大表； 会对小表进行缓存，mapjoin；
+大表 join 小表； 会执行reduce join，效率比较低；
+
+hive version3 之后：
+大表 join 小表：底层做了优化，也会先对小表进行缓存，执行mapjoin；
+
+
+2、大表join大表
+	1）空key过滤
+	使用场景：
+	1.非inner join使用
+	2.不需要字段为null的
+
+	-- 先过滤再join
+	-- 先join再过滤
+
+	2）空key转换
+
+	3）smb（Sort Merge Bucket join）
+	利用分桶表进行join： 分桶字段就是join的连接字段。
+
+	对join的两个大表，分别创建分桶表
+
+	设置参数：
+	set hive.optimize.bucketmapjoin=true;
+	set hive.optimize.bucketmapjoin.sortedmerge=true;
+	set hive.input.format=org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
+
+3、group by
+	并不是所有的聚合都需要在reduce端完成，很多聚合都可以先在
+	map端进行部分聚合。最后在reduce端得出最终结果。
+
+	1）开启map端聚合参数设置
+	是否在map端进行聚合，默认为true
+	set hive.map.aggr=true
+	在map端进行聚合操作的条目数目
+	set hive.groupby.mapaggr.checkinterval=100000
+	有数据倾斜的时候进行负载均衡（默认false）
+	set hive.groupby.skewindata=true
+	当选项设定为true，生成的查询计划会有两个MR job。第一个MRjob
+	中，Map的输出结果会随机分布到Reduce中，每个Reduce做部分聚合操作，并
+	输出结果，这样处理的结果是相同的group by key有可能被分发到不同的reduce
+	中，从而达到负载均衡的目的；第二个MR job在根据预处理的数据结果
+	按照group by key分布到reduce中（这个过程保证了相同了group by
+	key被分布到同一个reduce中），最后完成最终的聚合操作。
+
+
+4、count(distinct)
+数据量小的时候无所谓，数据量大的情况下，由于count distinct 操作
+需要用一个reduce task来完成，这一个reduce需要处理的数据量太大，
+就会导致整个job很难完成；
+可以使用group by再count的方式替换，但是需要注意group by造成的数据倾斜问题。
+
+
+
+采用group by去重
+set mapreduce.job.reduces = 5;
+
+count(distinct): 需要用一个reduce task来完成。
+group by ：可以使用多个reduce task并行来完成。
+
+
+select count(distinct(id)) from bigtable;
+
+==>
+
+select count(*) from (select id from bigtable group by id)t1;
+
+
+5、避免笛卡尔积
+join 不加on条件，或者无效的on条件，Hive只能使用 1 个reducer来完成笛卡尔积。
+
+6、行列过滤
+列处理：在select中，只拿需要的列，如果有分区，尽量使用分区过滤，
+少用select * 。
+
+行处理：在分区裁剪中，当使用外关联时，如果将副表的过滤条件写在where后面，
+那么就会先全表关联，之后再过滤。
+要先用where过滤两个表的子查询，然后再进行join关联，这样会减少关联的数据量。
+
+
+select o.id from bigtable b
+join bigtable o on o.id = b.id where o.id <= 10;
+
+系统优化：
+谓词下推：where 后的过滤字段，和join的关联字段相同时，会下推两张表中
+不相同时，只会下推到一张表中。有时候谓词下推功能失效，不靠谱。
+
+解决： 通过子查询后，再关联表
+select b.id from bigtable b
+join (select id from bigtable where id<=10) o on b.id = o.id;
+
+7、分区
+
+8、分桶
+
+
+合理设置Map以及Reduce数
+1.复杂文件增加map数
+2.小文件进行合并
+	1）在map执行前合并小文件，减少map数
+	HiveInputFormat 没有对小文件合并功能
+	set hive.input.format = org.apache.hadoop.hive.ql.io.CombineHiveInputFormat（系统默认的格式）
+	2）在map-reduce的任务结束时合并小文件的设置
+		在map-only任务结束时合并小文件，默认true
+		set hive.merge.mapfiles = true;
+		在map-reduce任务结束时合并小文件，默认false
+		set hive.merge.mapredfiles=true;
+		合并文件的大小，默认256M
+		set hive.merge.size.per.task=268435456;
+		当输出文件的平均大小小于该值时，启动一个独立的map-reduce任务进行文件merge
+		set hive.merge.smallfiles.avgsize=16777216;
+3.合理设置reduce数
+	1) 调整reduce个数方法1
+		（1）每个reduce处理的数据量默认是256M
+		set hive.exec.reducers.bytes.per.reducer=256000000
+		（2）每个任务最大的reduce数，默认1009
+		set hive.exec.reducers.max=1000;
+		计算reducer个数的公式
+		N = min(参数（2），总输入数据量/参数（1）)
+	2)调整reduce个数方法
+	在Hadoop的mapred-default.xml文件中修改
+	设置每个job的reduce个数
+	set mapreduce.job.reduces = 15;
+
+	3）reduce个数并不是越多越好
+		（1）过多的启动和初始化reduce也会消耗时间和资源
+		（2）另外，有多少个reduce，就会有多少个输出文件，如果生成了很多个小文件
+		那么如果这些小文件作为下一个任务的输入，则会出现小文件过多的问题；
+	在设置reduce个数的时候也需要考虑两个原则：
+	1.处理大数据量利用合适的reduce数
+	2.使单个reduce任务处理数据量大小要合适
+
+
+并行执行
+hive 会将一个查询转化成一个或者多个阶段。这样的阶段可以是MapReduce阶段、
+抽样阶段、合并阶段、limit阶段。或者Hive执行过程中可能需要的其他阶段。
+默认情况下，hive一次只会执行一个阶段。不过，某个特定的job可能包含众多的阶段，
+而这些阶段可能并非完全互相依赖的，也就是说有些阶段可以并行执行，那么job可能就
+越快完成。
+通过设置参数hive.exec.parallel值为true，就可以开启并非执行。不过，在共享
+集群中，需要注意下，如果job中并行阶段增多，那么集群利用率就会增加。
+
+set hive.exec.parallel=true; // 打开任务并行执行
+set hive.exec.parallel.thread.number=16; // 同一个SQL允许最大并行度，默认为8
+
+
+严格模式
+hive可以通过设置防止一些危险操作：
+1、分区表不使用分区过滤
+将hive.strict.checks.no.partition.filter设置为true时，对于分区表
+除非where语句中含有分区字段过滤条件来限制范围，否则不允许执行。换句话说：
+就是用户不允许扫描所有分区。进行这个限制的原因是，通常分区表都拥有非常大的数据集，而且数据增加迅速。没有进行分区限制的查询可能会消耗令人不可接受的巨大资源来处理这个表。
+2、使用order by没有limit过滤
+将hive.strict.checks.orderby.no.limit设置为true时，对于使用了order by语句的查询，要求必须使用limit语句。因为order by为了执行排序过程将所有结果数据分发到同一个reducer中进行处理，强制要求用户增加这个limit语句可以防止reducer额外执行很长一段时间。
+
+3、使用笛卡尔积
+将 hive.strict.checks.cartesian.product=true;会限制笛卡尔积查询。hive中，如果表足够大，那么查询就会出现不可控的情况。
+
+JVM重用
+只在小文件比较多的时候进行开启jvm重用。
+
+压缩
+
+
+
+
+
+
+
+
+

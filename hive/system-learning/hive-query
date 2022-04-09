@@ -581,6 +581,9 @@ lateral view
 用法：
 lateral view udtf(expression) tableAlias as columnAlias
 
+注意：如果炸裂多个列时，别名也要写多个列的别名
+lateral view udtf(expression) tableAlias as columnAlias1,columnAlias2,...
+
 解释：用于和split，explode等UDTF一起使用，它能够将一列数据拆分成多行数据，在此基础上
 可以对拆分后的数据进行聚合。
 
@@ -618,17 +621,24 @@ from movie_info；
 over() : 指定分析函数工作的数据窗口大小，这个数据窗口大小可能会随着行的变化而变化。
 是在group by语句之后生效。
 
+// 这些是写在over函数里边的参数
 current row : 当前行
 n preceding：往前n行数据
 n following：往后n行数据
 unbounded：起点
 	unbounded preceding：表示从前面的起点
 	unbounded following：表示到后面的终点
+
+
+// 这些是放在over窗口外边的，后跟over窗口一起使用
 lag（col，n，default_val）：往前第n行数据
 lead（col，n，default_val）： 往后第n行数据
 ntile（n）：把有序窗口的行分发到指定数据的组中，各个组有编号，编号从1开始，对于每一行，ntile
 返回此行所属的组的编号。
 注意：n必须为int类型
+over()中的partition by col order by col1 和 distribute by col sort by col1 结果是一样的，就是使用习惯问题。
+partition by 结合 sort by 一起使用会报错；sort by只能和distribute by 结合使用。
+
 
 例子：消费流水表
 name    orderdate   cost 
@@ -1017,3 +1027,110 @@ map_keys: 返回map中的key
 map_values: 返回map中的value
 array_contains : 判断array中是否包含某个元素
 sort_array: 将array中的元素排序
+
+
+
+练习：
+create table input(words string);
+
+导入数据：
+hello,spark
+hello,hive
+hello,flink,spark
+hive,spark,flink
+
+需求：对单词进行统计个数
+
+思路：
+explode 对字符串不能进行炸裂，只能对array或者map类型可以进行炸裂
+可以先将字符串通过split函数根据分隔符进行分隔生成array类型，然后再进行炸裂操作。
+1.先将字符串进行分隔生成array类型，然后使用explode函数对array类型数据进行炸裂生成多行，在一个列中
+select 
+	explode(split(words,',')) word 
+from input; t1
+2.通过嵌套子查询将该列进行分组，然后count(*)进行个数统计
+select 
+	word,
+	count(*) 
+from 
+	(select 
+		explode(split(words,',')) word 
+	from input)t1 
+group by word;
+
+
+grouping sets ：多维分析
+
+例子：
+create table staff(id string, name string, gender string, deptid string)
+row format delimited fields terminated by ',';
+
+数据：
+1001,zhangsan,male,10
+1002,lisi,female,10
+1003,wangwu,male,20
+1004,zhaoliu,female,20
+1005,banz,female,30
+1006,jone,male,30
+
+
+需求：统计(部门，性别)作为组的总人数, 按部门分组的总人数，按性别分组的总人数，以及总人数
+
+select deptid,gender,count(*) from staff group by deptid,gender grouping sets((deptid,gender),deptid,gender,());
+只生成了一个JOB任务
+
+
+输入数据：
+1001,zhangsan,male,10
+1002,lisi,female,10
+1003,wangwu,male,20
+1004,zhaoliu,female,20
+1005,banz,female,30
+1006,jone,male,30
+
+输出结果：
+NULL NULL   6
+10   NULL   2
+20   NULL   2
+30   NULL   2
+NULL female 3
+10   female 1
+20   female 1
+30   female 1
+NULL male   3
+10   male 	1
+20   male 	1
+30   male 	1
+
+
+MR 任务怎么实现？思考
+Mapper：
+1001,zhangsan,male,10 
+来了一条数据时，需要输出哪些？也就是对结果有哪些有影响的？
+NULL NULL   6
+10   NULL   2
+NULL male   3
+10   male 	1
+发现对这四条数据有影响。
+
+输出数据：
+context.write((null, null),1L)
+context.write((10, null),1L)
+context.write((null, male),1L)
+context.write((10, male),1L)
+
+1002,lisi,female,10
+context.write((null, null),1L)
+context.write((10, null),1L)
+context.write((null, female),1L)
+context.write((10, female),1L)
+
+Reducer：数据累加
+根据相同的key进行统计
+
+
+
+
+
+
+

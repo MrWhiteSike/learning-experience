@@ -1,0 +1,89 @@
+hive-true-cases
+
+Hive 实战
+
+需求：
+视频网站的常规指标，各种topN指标。
+
+-- 统计视频观看数Top10
+-- 统计视频类别热度Top10
+-- 统计视频观看数最高的20个视频的所属类别以及类别包含top20视频的个数
+-- 统计视频观看数Top50所关联视频的所属类别排序
+-- 统计每个类别中的视频热度Top10，以Music为例
+-- 统计每个类别视频观看数Top10
+-- 统计上传视频最多的用户Top10以及他们上传的视频观看次数在前20的视频
+
+数据结构:
+1.视频表
+videoid   		视频唯一id(string)			
+uploader		视频上传者（string）
+age 			视频年龄（int）
+category		视频类别（array<string>）
+length			视频长度（int）
+views			观看次数（int）
+rate 			视频评分（double）
+Ratings 		流量（int）
+conments		评论数（int）
+relatedid 		相关视频id(array<String>)
+
+2.用户表
+uploader 		上传者用户名 （string）
+videos          上传视频数（int）
+friends			朋友数量（int）
+
+
+创建原始表，和ORC表：
+
+原始表的创建：
+1.video_ori
+create table video_ori(
+	videoId string,
+	uploader string,
+	age int,
+	category array<string>,
+	length int,
+	views int,
+	rate float,
+	ratings int,
+	comments int,
+	relatedId array<string>)
+row format delimited fields terminated by '\t'
+collection items terminated by '&'
+stored as textfile;
+
+2.video_user_ori
+create table video_user_ori(
+	uploader string,
+	videos int,
+	friends int)
+row format delimited fields terminated by '\t'
+stored as textfile;
+
+创建ORC存储格式带snappy压缩的表：
+1.video_orc
+create table video_orc(
+	videoId string,
+	uploader string,
+	age int,
+	category array<string>,
+	length int,
+	views int,
+	rate float,
+	ratings int,
+	comments int,
+	relatedId array<string>)
+stored as orc
+tblproperties("orc.compress"="SNAPPY");
+
+2.video_user_orc
+create table video_user_orc(
+	uploader string,
+	videos int,
+	friends int)
+row format delimited fields terminated by '\t'
+stored as orc
+tblproperties("orc.compress"="SNAPPY");
+
+
+
+

@@ -79,3 +79,7 @@ hive > select my_len(name) name_len from emp;
 
 
 
+
+
+
+
