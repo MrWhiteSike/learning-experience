@@ -85,5 +85,259 @@ stored as orc
 tblproperties("orc.compress"="SNAPPY");
 
 
+需求1：统计视频观看数Top10
+select 
+	videoId
+from 
+	video_orc
+order by views desc
+limit 10;
 
+
+需求2：统计视频类别热度Top10
+
+第一步：视频类别进行 炸裂 一行变多行
+select
+	explode(category) category_name
+from video_orc;
+
+第二步：根据类别进行分组，排序，然后取前10名；
+select
+	category_name,
+	count(*) ct 
+from
+	(select
+		explode(category) category_name
+	from video_orc)t1
+group by category_name
+order by ct desc
+limit 10;
+
+
+需求3：统计视频观看数最高的20个视频的所属类别以及类别包含top20视频的个数
+1.求出统计视频观看数最高的20个视频的所属类别
+select
+	category,
+	views
+from video_orc
+order by views desc
+limit 20; t1
+
+2.将所属类别炸开
+select
+	explode(category) category_name
+from t1; t2
+
+3.计算各个类别包含Top20视频的个数
+select
+	category_name,
+	count(*) ct
+from
+	(select
+		explode(category) category_name
+	from (select
+				category,
+				views
+			from video_orc
+			order by views desc
+			limit 20)t1
+	)t2
+group by category_name;
+
+需求4：统计视频观看数Top50所关联视频的所属类别排序
+1.视频观看数Top50所关联视频
+select
+	relatedId,
+	views
+from video_orc
+order by views desc
+limit 50; t1
+
+2.关联视频炸开
+select
+	explode(relatedId) related_id
+from t1; t2
+
+3. join原表，取出关联视频所属的类别（数组）
+select
+	g.category
+from t2
+join video_orc g
+on t2.related_id = g.videoId; t3
+
+4.炸开类别字段
+select
+	explode(category) category_name
+from t3; t4
+
+5.按照类别分组，求count，并按照count排序
+select
+	category_name,
+	count(*) ct
+from 
+	(select
+		explode(category) category_name
+	from (select
+				g.category
+		  from (select
+					explode(relatedId) related_id
+				from (select
+					relatedId,
+					views
+				from video_orc
+				order by views desc
+				limit 50)t1
+		  )t2
+		  join video_orc g
+	      on t2.related_id = g.videoId
+	)t3
+)t4
+group by category_name
+order by ct desc;
+
+需求5： 统计每个类别中的视频热度Top10，以Music为例
+类别这个字段使用的次数比较多，为了复用类别信息，可以重新创建一张类别炸开后的表
+create table video_orc_category(
+	videoId string,
+	uploader string,
+	age int,
+	category string,
+	length int,
+	views int,
+	rate float,
+	ratings int,
+	comments int,
+	relatedId array<string>)
+stored as orc
+tblproperties("orc.compress"="SNAPPY");
+
+
+导入数据：
+insert into table video_orc_category
+select
+	videoId,
+	uploader,
+	age,
+	category_name,
+	length,
+	views,
+	rate,
+	ratings,
+	comments,
+	relatedId
+from video_orc lateral view explode(category) category_tmp as category_name;
+
+数仓中分层为了表的复用。
+
+
+select
+	videoId,
+	views
+from video_orc_category
+where category = 'Music'
+order by views desc
+limit 10;
+
+以后的工作中，如果发现很多查询使用同一个子查询，那么这个子查询可以单独抽取出来，
+然后创建一张表来保存子查询的数据，为了以后的复用。
+
+
+需求6： 统计每个类别视频观看数Top10
+1.求出每个类别视频观看数排名
+select
+	category,
+	videoId,
+	views,
+	rank() over(partition by category order by views desc) rk
+from video_orc_category; t1
+
+2.取出前10名
+select
+	category,
+	videoId,
+	views
+from 
+	t1
+where rk<=10;
+
+最终SQL：
+select
+	category,
+	videoId,
+	views
+from 	
+	(select
+		category,
+		videoId,
+		views,
+		rank() over(partition by category order by views desc) rk
+	from video_orc_category)t1
+where rk<=10;
+
+需求7： 统计上传视频最多的用户Top10以及他们上传的视频观看次数在前20的视频
+1.求出上传视频最多的10个用户
+select
+	uploader
+from video_user_orc
+order by videos desc
+limit 10; t1
+
+2.跟视频表join，然后按照上传用户分组，views进行排名
+select
+	t1.uploader,
+	videoId,
+	views
+from
+	t1
+join
+	video_orc v
+on t1.uploader = v.uploader; t2
+
+3.根据观看次数，对用户所上传的视频进行排名
+select
+	uploader,
+	videoId,
+	views,
+	rank() over(partition by uploader order by views desc) rk
+from
+	t2；t3
+
+4.取出前20名的视频
+select
+	uploader,
+	videoId,
+	views
+from 
+	t3
+where rk<=20;
+
+
+
+最终SQL：
+select
+	uploader,
+	videoId,
+	views
+from 
+	(select
+		uploader,
+		videoId,
+		views,
+		rank() over(partition by uploader order by views desc) rk
+	from
+		(select
+			t1.uploader,
+			videoId,
+			views
+		from
+			(select
+				uploader
+			from video_user_orc
+			order by videos desc
+			limit 10)t1
+		join
+			video_orc v
+		on t1.uploader = v.uploader)t2
+	)t3
+where rk<=20;
 
