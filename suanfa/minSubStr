@@ -1,0 +1,60 @@
+:Q1：找出字符串中，包含n个字符的最小子串
+
+public static void main(String[] args) {
+    String str1 = "Welcome";
+    String str2 = "ne";
+    System.out.println(minStr(str1, str2));
+
+  }
+
+// 方法1：暴力解法
+public static String minStr(String str1, String str2){
+  char[] chars1 = str1.toCharArray();
+  char[] chars2 = str2.toCharArray();
+  TreeMap<Integer, String> map = new TreeMap<Integer, String>();
+  for(int i=0;i<chars1.length;i++){
+      for(int j=i+chars2.length;j<chars1.length;j++){
+        int flag = 0;
+        String temp = str1.substring(i,j);
+        for(int z=0;z<chars2.length;z++){
+          if(!str1.substring(i,j).contains(String.valueOf(chars2[z]))){
+            break;
+          }
+          flag++;
+        }
+        if(flag == chars2.length){
+          map.put(temp.length(), temp);
+        }
+      }
+  }
+  return map.size() == 0?"":map.get(map.firstKey());
+}
+
+// 简单解法：从最小的子串遍历，找到之后就返回
+public static String minStr2(String str1, String str2){
+    char[] chars1 = str1.toCharArray();
+    char[] chars2 = str2.toCharArray();
+    TreeMap<Integer, String> map = new TreeMap<Integer, String>();
+    int len = chars2.length;
+    while (len<=chars1.length) {
+        for(int i=0;i <= chars1.length-len;i++){
+            int flag = 0;
+            String temp = str1.substring(i,i+len);
+            for(int z=0;z<chars2.length;z++){
+                if(!temp.contains(String.valueOf(chars2[z]))){
+                    break;
+                }
+                flag++;
+            }
+            if(flag == chars2.length){
+                return temp;
+            }
+        }
+        len++;
+    }
+    return "";
+}
+
+
+
+

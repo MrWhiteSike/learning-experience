@@ -575,14 +575,22 @@ group by con_blood;
 
 4.列转行
 explode(col): 将hive一列中复杂的Array或者Map结构拆分成多行。
+posexplode(col): 将hive一列中复杂的Array或者Map结构拆分成多行和两列（序号列（注意：index是从0开始的）和炸裂的列）
+
 属于UDTF函数，
+
 lateral view
 
 用法：
 lateral view udtf(expression) tableAlias as columnAlias
 
-注意：如果炸裂多个列时，别名也要写多个列的别名
+注意：
+1、如果炸裂多个列时，别名也要写多个列的别名
 lateral view udtf(expression) tableAlias as columnAlias1,columnAlias2,...
+
+2、lateral view 使用多次，返回笛卡儿积，如果对两列都进行explode的话
+，假设每列都有3个值，最终会变为3*3=9行，但是我们实际只想要3行
+
 
 解释：用于和split，explode等UDTF一起使用，它能够将一列数据拆分成多行数据，在此基础上
 可以对拆分后的数据进行聚合。
