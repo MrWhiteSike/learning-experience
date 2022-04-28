@@ -1,0 +1,21 @@
+SQL-execute
+
+提示：理解sql的执行顺序更加有利于大家写sql
+
+(1)from
+
+(2)join
+
+(3)on
+
+(4)where
+
+(5)select
+
+(6)group by
+
+(7)having
+
+(8)order by
+
+(9)limit

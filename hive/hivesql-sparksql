@@ -1,0 +1,25 @@
+hivesql-sparksql
+
+Hive SQL 和 Spark Sql的区别：
+
+都支持ThriftServer服务，为JDBC提供解决方案：
+
+区别：
+Spark SQL：
+是spark 的一个库文件
+sparkSQL元数据可有可无
+Spark SQL中schema是自动推断的
+支持标准SQL语句，也支持HQL语句等
+从开发角度来讲，即支持SQL方式开发，也支持HQL开发，还支持函数式编程DSL实现SQL语句。
+
+Hive：
+是一个框架
+Hive中必须有元数据，一般由MySQL管理，必须开启Metastore服务。
+Hive 中在建表时必须明确使用DDL声明schema
+只支持HQL语句。
+
+处理海量数据，比如一个月、一个季度、一年的数据量，依然可以处理，虽然很慢
+
+spark SQL：这种情况下不支持，无法处理。
+在企业中，Hive和Spark SQL能够共存，互为弥补。
+
