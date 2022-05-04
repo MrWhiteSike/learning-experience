@@ -1,0 +1,111 @@
+mysql-ubuntu
+
+参考：
+Ubuntu18.04 MySQL5.7 安装步骤详解
+https://blog.csdn.net/Ayue1220/article/details/105284569?spm=1001.2101.3001.6650.1&utm_medium=distribute.pc_relevant.none-task-blog-2%7Edefault%7ECTRLIST%7Edefault-1.pc_relevant_default&depth_1-utm_source=distribute.pc_relevant.none-task-blog-2%7Edefault%7ECTRLIST%7Edefault-1.pc_relevant_default&utm_relevant_index=2
+
+
+1、查看有没有安装MySQL
+
+$ sudo dpkg -l | grep mysql
+
+2、安装mysql
+
+$ sudo apt install mysql-server
+
+注意：安装 mysql 时如果报错：E: 无法获得锁 /var/lib/dpkg/lock-frontend - open (11: 资源暂时不可用)，可以按照以下命令进行强制解锁：
+$ sudo rm /var/cache/apt/archives/lock
+$ sudo rm /var/lib/dpkg/lock
+
+3、安装完成之后可以使用如下命令来检查是否安装成功
+
+$ netstat -tap | grep mysql
+# 通过上述命令检查之后，如果看到有 mysql 的socket处于 LISTEN 状态则表示安装成功。
+
+$ dpkg -l | grep mysql
+
+4、检查 mysql 启动状态
+
+$ systemctl status mysql
+
+5、查看登录密码
+
+$ sudo cat /etc/mysql/debian.cnf
+
+
+输入以下指令：
+
+$ mysql -u debian-sys-maint -p
+
+这步的密码输入的是 UpCeF01eCrhJEYVp，上图框起来的部分
+
+6、修改密码，将 your_new_pasword 换成你自己想设置的密码，比如123456
+
+>> use mysql;
+>> update mysql.user set authentication_string=password('your_new_pasword') where user='root' and Host ='localhost';
+>> update user set plugin="mysql_native_password";
+>> flush privileges;
+
+7.重启数据库
+
+$ sudo service mysql restart
+1
+8、登录验证新密码
+
+$ mysql -uroot -p
+# 此处输入你的新密码
+
+9、设置允许数据库远程连接
+
+
+9.1 编辑文件 /etc/mysql/mysql.conf.d/mysqld.cnf，注释掉 bind-address = 127.0.0.1
+
+$ sudo vi /etc/mysql/mysql.conf.d/mysqld.cnf
+1
+9.2 保存退出，然后登录 mysql 服务,执行如下命令，其中connect_pasword 建议与你本地的登录密码保持一致。
+
+>> grant all on *.* to root@'%' identified by 'connect_pasword' with grant option;
+
+# 刷新权限
+>> flush privileges;
+
+10、重启 mysql，远程客户端连接测试
+
+注意：一定要重启，否则客户端连接可能会报错：2003 - Can’t connect to MySQL server on ‘192.168.186.131’ (10038)
+
+修改密码
+use mysql;
+update mysql.user set authentication_string=password('123456') where user='root' and Host ='localhost';
+update user set plugin="mysql_native_password";
+flush privileges;
+
+
+grant all on *.* to root@'%' identified by '123456' with grant option;
+
+
+
+ubuntu18.04下开启MySQL的binlog日志：
+
+	1、ubuntu18下的MySQL配置binlog的文件在
+	/etc/mysql/mysql.conf.d/mysqld.cnf中
+	2、vim /etc/mysql/mysql.conf.d/mysqld.cnf
+	从文件中可以找到#server-id = 1和#log_bin=/var/log/mysql/mysql-bin.log，将注释取消（server-id必须在集群中是唯一值，如果是单机，则可随意设置）
+	并且添加 binlog_do_db = gmall-flink # binlog包含的数据库名，就是指定具体要同步的数据库
+	可以根据自己的需要更改expire_logs_days和max_binlog_size的值；
+	3、重启MySQL使配置生效
+		service mysql restart 
+	4、验证logbin是否成功开启
+		方式一：
+		进入mysql shell界面，show variables like "%log_bin%";
+		查看如下结果，表示logbin日志已开启：
+		log_bin	ON
+		log_bin_basename	/var/log/mysql/mysql-bin
+		log_bin_index	/var/log/mysql/mysql-bin.index
+		log_bin_trust_function_creators	OFF
+		log_bin_use_v1_row_events	OFF
+		sql_log_bin	ON
+
+		方式二：
+		ll /var/log/mysql
+
+		对数据库进行增删改操作，下边的文件就会改变

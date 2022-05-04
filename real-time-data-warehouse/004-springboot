@@ -1,0 +1,241 @@
+日志数据采集：
+	SpringBoot：要写数据接口
+		分层：
+			Controller层：拦截用户请求，调用service,响应请求  服务员
+			Service：调用Dao，加工数据							厨房
+			DAO：获取数据										采购
+			
+			持久化层：存储数据 									菜市场
+			
+			
+		分层的思想：解耦，提高代码复用性，易扩展，易维护，模块化
+
+快速搭建SpringBoot程序，采集模拟生成的日志数据：
+
+1)	在IDEA中安装lombok插件
+在Plugins下搜索lombok然后在线安装即可，安装后注意重启
+ 
+2)	创建空的父工程gmall-flink，用于管理后续所有的模块module
+我们这里就是为了将各个模块放在一起，但是模块彼此间还是独立的，所以创建一个Empty Project即可；如果要是由父module管理子module，需要将父module的pom.xml文件的<packaging>设置为pom
+ 
+3)	新建SpringBoot模块，作为采集日志服务器
+A.	在父project下增加一个Module，选择Spring Initializr
+ 
+注意：有时候SpringBoot官方脚手架不稳定，我们切换国内地址https://start.aliyun.com 
+ 
+B.	配置项目名称为gmall-logger及JDK版本
+ 
+C.	选择版本以及通过勾选自动添加lombok、SpringWeb、Kafka相关依赖
+ 
+注意：这里如果使用spring官方脚手架地址，看到的页面可能会略有差异，但效果相同
+D.	完成之后开始下载依赖，完整的pom.xml文件如下
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.atguigu</groupId>
+    <artifactId>gmall-logger</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>gmall-logger</name>
+    <description>Demo project for Spring Boot</description>
+
+    <properties>
+        <java.version>1.8</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <spring-boot.version>2.4.1</spring-boot.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>2.4.1</version>
+                <configuration>
+                    <mainClass>com.atguigu.gmalllogger.GmallLoggerApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>repackage</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+E.	创建LoggerController输出SpringBoot处理流程
+package com.atguigu.gmalllogger.controller;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+//@RestController  = @Controller+@ResponseBody
+@RestController //表示返回普通对象而不是页面
+public class LoggerController {
+
+    @RequestMapping("test1")
+    //    @ResponseBody
+    public String test1() {
+        System.out.println("11111111");
+        return "success";
+    }
+
+    @RequestMapping("test2")
+    public String test2(@RequestParam("name") String name,
+                        @RequestParam("age") int age) {
+        System.out.println(name + ":" + age);
+        return "success";
+    }
+
+}
+F.	运行Gmall2021LoggerApplication，启动内嵌Tomcat
+ 
+G.	用浏览器测试并查看控制台输出
+
+
+SpringBoot整合Kafka：
+1)	修改SpringBoot核心配置文件application.propeties
+	# 应用名称
+	spring.application.name=gmall-logger
+
+	# 应用服务 WEB 访问端口
+	server.port=8081
+
+	#============== kafka ===================
+	# 指定kafka 代理地址，可以多个
+	spring.kafka.bootstrap-servers=hadoop1:9092
+
+	# 指定消息key和消息体的编解码方式
+	spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer
+	spring.kafka.producer.value-serializer=org.apache.kafka.common.serialization.StringSerializer
+
+2)	在LoggerController中添加方法，将日志落盘并发送到Kafka主题中
+	import lombok.extern.slf4j.Slf4j;
+	import org.springframework.beans.factory.annotation.Autowired;
+	import org.springframework.kafka.core.KafkaTemplate;
+	import org.springframework.web.bind.annotation.RequestMapping;
+	import org.springframework.web.bind.annotation.RequestParam;
+	import org.springframework.web.bind.annotation.RestController;
+
+	//@RestController  = @Controller+@ResponseBody
+	@RestController //表示返回普通对象而不是页面
+	@Slf4j
+	public class LoggerController {
+
+		@Autowired
+		private KafkaTemplate<String, String> kafkaTemplate;
+
+		@RequestMapping("applog")
+		public String getLogger(@RequestParam("param") String jsonStr) {
+			//落盘
+			log.info(jsonStr);
+
+			//写入Kafka
+			kafkaTemplate.send("ods_base_log", jsonStr);
+
+			return "success";
+		}
+	}
+
+3)	在Resources中添加logback.xml配置文件
+	<?xml version="1.0" encoding="UTF-8"?>
+	<configuration>
+		<property name="LOG_HOME" value="d:/opt/module/lo、gs" />
+		<appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+			<encoder>
+				<pattern>%msg%n</pattern>
+			</encoder>
+		</appender>
+
+		<appender name="rollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+			<file>${LOG_HOME}/app.log</file>
+			<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+				<fileNamePattern>${LOG_HOME}/app.%d{yyyy-MM-dd}.log</fileNamePattern>
+			</rollingPolicy>
+			<encoder>
+				<pattern>%msg%n</pattern>
+			</encoder>
+		</appender>
+
+		<!-- 将某一个包下日志单独打印日志 -->
+		<logger name="com.bsk.gmalllogger.controller.LoggerController"
+				level="INFO" additivity="false">
+			<appender-ref ref="rollingFile" />
+			<appender-ref ref="console" />
+		</logger>
+
+		<root level="error" additivity="false">
+			<appender-ref ref="console" />
+		</root>
+	</configuration>
+		logback配置文件说明
+		appender
+	追加器，描述如何写入到文件中（写在哪，格式，文件的切分）
+	ConsoleAppender--追加到控制台
+	RollingFileAppender--滚动追加到文件
+		logger
+	控制器，描述如何选择追加器
+	注意：要是单独为某个类指定的时候，别忘了修改类的全限定名
+		日志级别
+	TRACE		[DEBUG	INFO	WARN	ERROR]		FATAL
+
+4)	修改hadoop102上的rt_applog目录下的application.yml配置文件
+注意：mock.url设置为自身Windows的IP地址
+	mock.url: "http://172.19.16.1:8081/applog"
+
+5)	测试
+	运行Windows上的Idea程序LoggerApplication
+	运行rt_applog下的jar包
+	启动kafka消费者进行测试
+	./kafka-console-consumer.sh --bootstrap-server hadoop1:9092 --topic ods_base_log
+
+
+
+

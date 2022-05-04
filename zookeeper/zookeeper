@@ -1,0 +1,104 @@
+zookeeper集群搭建
+
+1、下载(注意)
+wget http://archive.apache.org/dist/zookeeper/stable/apache-zookeeper-3.6.3-bin.tar.gz
+
+2、解压
+tar -zxvf apache-zookeeper-3.6.3-bin.tar.gz
+
+3、修改conf目录下的
+cp zoo_sample.cfg zoo.cfg
+
+4、修改zoo.cfg,最后一行添加
+server.1=192.168.36.121:2188:2888
+server.2=192.168.36.122:2188:2888
+server.3=192.168.36.123:2188:2888
+
+5、复制server.1所在主机的zookeeper解压包到server.2和server.3主机
+scp -r apache-zookeeper-3.6.3-bin/ root@192.168.36.122:/opt/module
+scp -r apache-zookeeper-3.6.3-bin/ root@192.168.36.123:/opt/module
+
+6、指定myid服务号
+创建/opt/module/apache-zookeeper-3.6.3-bin/conf/data目录
+cd /opt/module/apache-zookeeper-3.6.3-bin/conf
+mkdir data
+修改zoo.cfg中，
+dataDir=/opt/module/apache-zookeeper-3.6.3-bin/conf/data
+在server.1中的data目录执行如下：
+echo "1" > myid
+另外两台机器也是一样的操作，myid号变为2,3了
+
+7、启动
+分别在server.1,server.2,server.3所在主机的zookeeper的bin目录下启动
+cd /opt/module/apache-zookeeper-3.6.3-bin/bin
+./zkServer.sh start
+
+8、连接zookeeper集群
+cd /opt/module/apache-zookeeper-3.6.3-bin/bin
+./zkCli.sh -server 192.168.36.121:2181,192.168.36.122:2181,192.16.36.123:2181
+
+
+9、脚本启动zookeeper集群的所有服务器
+	
+在server.1服务器上：
+	修改/etc/hosts
+	vim /etc/hosts
+	添加：
+	192.168.36.121 hadoop1
+	192.168.36.122 hadoop2
+	192.168.36.123 hadoop3
+
+
+ssh配置免密登录：
+	1)在本地生成公钥私钥
+	ssh-keygen
+	ls ~/.ssh
+	会看到生成的两个文件id_rsa和id_rsa.pub
+	2)将公钥上传到目标服务器
+	ssh-copy-id -i ~/.ssh/id_rsa.pub root@192.168.36.121，执行后按照提示输入服务器root用户密码
+	3)测试免密登录
+	执行命令ssh root@192.168.36.121，如果不用输入密码就表示免密配置成功
+	4)删除免密
+	上传公钥后，目标服务器对应用户下的.ssh/authorized_keys文件会添加一行内容，也就是本地生成的公钥。因此编辑该文件，将对应的公钥内容删掉，就禁用了免密。
+
+编写zookeeper集群启动脚本zk.sh：
+
+#!/bin/bash
+
+case $1 in
+"start"){
+	for i in hadoop1 hadoop2 hadoop3
+	do 
+		 echo -------------------------------- $i zookeeper 启动 ---------------------------
+		ssh $i "/opt/module/apache-zookeeper-3.6.3-bin/bin/zkServer.sh start"
+	done
+}
+;;
+"stop"){
+	for i in hadoop1 hadoop2 hadoop3
+	do
+		echo -------------------------------- $i zookeeper 停止 ---------------------------
+		ssh $i "/opt/module/apache-zookeeper-3.6.3-bin/bin/zkServer.sh stop"
+	done
+}
+;;
+"status"){
+	for i in hadoop1 hadoop2 hadoop3
+	do
+		echo -------------------------------- $i zookeeper 状态 ---------------------------
+		ssh $i "/opt/module/apache-zookeeper-3.6.3-bin/bin/zkServer.sh status"
+	done
+}
+;;
+esac
+
+修改zk.sh执行权限：
+chmod +x ./zk.sh
+
+启动命令：
+./zk.sh start
+停止命令：
+./zk.sh stop
+查看状态命令：
+./zk.sh status
+

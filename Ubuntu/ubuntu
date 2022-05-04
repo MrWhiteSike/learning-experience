@@ -1,0 +1,179 @@
+ubuntu
+
+1、安装vim：
+sudo apt install vim
+
+2、安装net-tools:
+sudo apt install net-tools
+
+
+3、配置虚拟机的静态IP地址：
+ubantu 17之后：
+cd /etc/netplan/
+sudo vim 01-network-manager-all.yaml
+添加如下内容：
+ethernets:
+     ens33:         #配置的网卡名称
+       addresses: [192.168.36.121/24]   #设置IP掩码
+       gateway4: 192.168.36.2       #设置网关
+       nameservers:
+         addresses: [210.22.70.3,114.114.114.114]  #设置dns
+sudo netplan apply 这个命令使上述配置生效
+
+如果连不上互联网的话，把下边的内容删除，然后执行netplan apply命令；
+sudo vim /etc/network/interfaces
+添加如下内容：
+auto ens33
+iface ens33 inet static
+address 192.168.36.121
+netmask 255.255.255.0
+gateway 192.168.36.2
+
+ifconfig查看IP是否修改成功
+
+
+4、Ubuntu18.04下安装配置SSH服务
+  a.安装ssh工具：
+  sudo apt install openssh-server
+  b.启动SSH服务：
+  /etc/init.d/ssh start
+  c.查看进程，检查是否启动成功：
+  ps -e | grep sshd
+
+/etc/init.d/ssh restart #重启SSH服务
+/etc/init.d/ssh stop #关闭SSH服务
+
+xshell 连接验证安装ssh服务是否成功
+
+配置root用户SSH服务:
+Ubuntu中SSH服务安装完成后查看是否允许root用户登陆，若不允许则无法远程登陆root用户，需要修改配置
+  打开“/etc/ssh/sshd_config”
+  sudo vim /etc/ssh/sshd_config
+  查看是否有“PermitRootLogin yes”，没有添加即可，完成后保存退出，然后重启SSH服务 /etc/init.d/ssh restart
+
+其他账号修改root密码：
+sudo passwd root
+
+Enter new UNIX password:
+Retype new UNIX password:
+passwd: password updated successfully
+
+5.jdk安装与环境变量配置
+	1）创建java目录
+	mkdir /usr/java
+	2）上传jdk1.8的tar包到该目录
+	3）解压该tar包
+	tar -zxvf jdk-8u131-linux-x64.tar
+	4）设置环境变量
+	vim ~/.bashrc
+	添加如下内容：
+	export JAVA_HOME=/usr/java/jdk1.8.0_131
+	export PATH=$PATH:$JAVA_HOME/bin
+	5）使设置java环境变量生效
+	source ~/.bashrc
+	6）验证环境变量是否生效
+	java -version
+	
+	打印如下信息说明jdk安装配置成功
+	java version "1.8.0_131"
+	Java(TM) SE Runtime Environment (build 1.8.0_131-b11)
+	Java HotSpot(TM) 64-Bit Server VM (build 25.131-b11, mixed mode)
+
+
+6、ubuntu自动同步时间
+方法一：选择时区
+1.执行命令：
+dpkg-reconfigure tzdata
+2.选择Asia->Shanghai
+3.防止系统重启后时区改变，执行下面一行命令
+cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+
+方法二：网上同步时间
+
+1.  安装ntpdate工具
+# sudo apt-get install ntpdate
+2.  设置系统时间与网络时间同步
+# ntpdate cn.pool.ntp.org
+3.  将系统时间写入硬件时间
+# hwclock --systohc
+
+
+7、【ubuntu 18.04】安装nginx的两种方式
+方式一：apt 安装nginx
+
+安装(安装完后会自动启动)
+apt install nginx
+查看nginx 是否安装成功
+nginx -v
+
+启动nginx
+service nginx start
+
+查看nginx运行状态
+systemctl status nginx
+
+启动后，在网页重输入ip地址（比如，http://192.168.36.121/），即可看到nginx的欢迎页面。至此nginx安装成功
+
+# nginx文件安装完成之后的文件位置：
+/usr/sbin/nginx：主程序
+/etc/nginx：存放配置文件
+/usr/share/nginx：存放静态文件
+/var/log/nginx：存放日志
+
+# 卸载apt安装的nginx
+# 彻底卸载nginx
+sudo apt --purge autoremove nginx
+#查看nginx的版本号
+nginx -v
+
+
+
+方式二：下载nginx包安装
+
+# 安装依赖包
+sudo apt-get install gcc
+sudo apt-get install libpcre3 libpcre3-dev
+sudo apt-get install zlib1g zlib1g-dev
+sudo apt-get install openssl openssl-dev
+sudo apt-get install openssl
+sudo apt-get install libssl-dev
+
+# 安装nginx
+cd /usr/local
+mkdir nginx
+cd nginx
+wget http://nginx.org/download/nginx-1.20.2.tar.gz
+tar -xvf nginx-1.20.2.tar.gz
+
+
+# 编译nginx
+# 进入nginx目录
+/usr/local/nginx/nginx-1.20.2
+# 执行命令
+./configure
+# 执行make命令
+make
+# 执行make install命令
+make install#进入nginx启动目录cd /usr/local/nginx/sbin# 启动nginx./nginx
+
+网页输入ip地址（http://ip），访问成功，到此，nginx安装完毕
+
+
+管理nginx服务：
+停止nginx服务
+systemctl stop nginx
+启动nginx
+systemctl start nginx
+重启nginx服务
+systemctl restart nginx
+重新加载nginx服务配置
+systemctl reload nginx
+
+注意：nginx服务，不能通过jps查看服务，因为jps查看java编写的，nginx是c编写的，所以查看不了
+
+
+
+
+
+
+

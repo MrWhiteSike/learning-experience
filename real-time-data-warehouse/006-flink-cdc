@@ -1,0 +1,26 @@
+006-flink-cdc
+
+1、什么是CDC
+	CDC是Change Data Capture（变更数据获取）简称。核心思想是，监测并获取数据库的变动（包括数据或者数据表的插入，更新以及删除等），将这些变更按发生的顺序完整记录下来，写入到消息中间件中以供其他服务进行订阅以及消费。
+
+2、CDC种类
+	CDC主要分 基于查询 和基于Binlog两种方式，我们主要了解一下这两种之间的区别：
+
+	基于查询的CDC：
+		开源产品：Sqoop、Kafka JDBC Source
+		执行模式：Batch
+		是否可以捕获所有数据变化：否
+		延迟性：高延迟
+		是否增加数据库压力：是
+
+	基于Binlog的CDC：
+		开源产品：Canal、Maxwell、Debezium
+		执行模式：Streaming
+		是否可以捕获所有数据变化：是
+		延迟性：低延迟
+		是否增加数据库压力：否
+
+3、Flink-CDC
+	Flink社区开发了flink-cdc-connectors组件，这是一个可以直接从MySQL、PostgreSQL等数据库直接 读取全量数据 和 增量变更数据 的source 组件。
+	目前已经开源，开源地址：https://github.com/ververica/flink-cdc-connectors
+

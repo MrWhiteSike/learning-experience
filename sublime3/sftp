@@ -1,0 +1,18 @@
+Sublime中安装sftp插件及使用教程
+
+针对Sublime Text 3
+
+1、先安装Package Control组件，用于管理插件。 按ctrl＋｀组合键，输入以下内容后按Enter键
+import urllib.request,os; pf = 'Package Control.sublime-package'; ipp = sublime.installed_packages_path(); urllib.request.install_opener( urllib.request.build_opener( urllib.request.ProxyHandler()) ); open(os.path.join(ipp, pf), 'wb').write(urllib.request.urlopen( 'http://sublime.wbond.net/' + pf.replace(' ','%20')).read())
+
+2、window 按ctrl＋shift＋p。 在弹出的输入框中输入： install 然后选择第一条
+Package Control:Install Package
+
+3、在接下来的输入框中输入：sftp，并选择SFTP插件。
+
+4、安装成功后在Preferences下会看到相应内容，安装结束
+
+5、连接server服务器，依次File------->SFTP/FTP------------->Setup Server
+之后会出现一个配置文件页面，根据自己实际情况修改文件，之后保存，可以将文件名设置为IP地址，这样方便区分
+
+6、连接成功sftp之后，出现以下界面，就可以操作远程文件了

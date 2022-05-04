@@ -1,0 +1,115 @@
+
+日志采集模块-打包单机部署
+1、修改gmall-logger中的logback.xml配置文件
+<property name="LOG_HOME" value="/opt/module/gmall-flink/rt_applog/logs" />
+注意：路径和上面创建的路径保持一致，根据自己的实际情况进行修改
+
+2、打包
+
+3、将打好的jar包上传到hadoop1的/opt/module/gmall-flink/rt_applog目录下
+
+4、修改/opt/module/gmall-flink/rt_applog/application.yml
+#http模式下，发送的地址
+mock.url=http://hadoop1:8081/applog
+
+5、测试
+	运行hadoop102上的rt_gmall下的日志处理jar包
+	运行rt_applog下的jar包
+	启动kafka消费者进行测试
+	./kafka-console-consumer.sh --bootstrap-server hadoop1:9092 --topic ods_base_log
+
+
+
+日志采集模块-打包集群部署，并用Nginx进行反向代理
+1、搭建好Nginx环境
+参考Nginx
+
+2、将日志采集的jar包同步到hadoop2和hadoop3
+在hadoop2和hadoop3上创建目录
+mkdir -p /opt/module/gmall-flink/rt_applog
+拷贝
+scp gmall-logger-0.0.1-SNAPSHOT.jar root@192.168.36.122:/opt/module/gmall-flink/rt_applog
+scp gmall-logger-0.0.1-SNAPSHOT.jar root@192.168.36.123:/opt/module/gmall-flink/rt_applog
+
+3、修改模拟日志生成的配置
+	发送到服务器路径修改为nginx的路径：
+
+		#模拟数据发送模式
+		mock.type=http
+		#http模式下，发送的地址
+		mock.url=http://hadoop1/applog
+
+4、测试
+	启动zk集群和kafka集群
+	1）运行kafka消费者，准备消费数据
+		bin/kafka-console-consumer.sh --bootstrap-server hadoop1:9092 --topic ods_base_log
+	2）启动nginx服务
+		systemctl start nginx
+	3）运行采集数据的jar
+		$ java -jar gmall-logger-0.0.1-SNAPSHOT.jar
+		$ java -jar gmall-logger-0.0.1-SNAPSHOT.jar
+		$ java -jar gmall-logger-0.0.1-SNAPSHOT.jar
+	4）运行模拟生成数据的jar
+		$ java -jar gmall2020-mock-log-2020-12-18.jar
+
+
+集群群起脚本：
+将采集日志服务（采集日志数据的jar启动服务）放到脚本中
+在/opt/module/gmall-flink/bin目录中创建logger.sh，并chmod修改执行权限。
+chmod +x logger.sh
+
+logger.sh的脚本如下：
+#!/bin/bash
+
+JAVA_BIN=/usr/java/jdk1.8.0_131/bin/java
+APPNAME=gmall-logger-0.0.1-SNAPSHOT.jar
+
+
+
+case $1 in
+	"start" )
+		{
+			# 启动nginx服务
+			systemctl start nginx
+
+			for i in hadoop1 hadoop2 hadoop3 
+			do
+				echo "---------------------- $i -------------------"
+				ssh $i "$JAVA_BIN -Xms32m -Xmx64m -jar /opt/module/gmall-flink/rt_applog/$APPNAME" >/dev/null 2>&1 &
+			done
+		}
+		;;
+	"stop" )
+		{
+			# 启动
+			systemctl stop nginx
+
+			for i in hadoop1 hadoop2 hadoop3 
+			do
+				echo "---------------------- $i -------------------"
+				ssh $i "ps -ef | grep $APPNAME | grep -v grep | awk '{print \$2}' | xargs kill" >/dev/null 2>&1
+			done
+		}
+		;;
+esac
+
+
+测试：
+启动zk集群和kafka集群
+	1）运行kafka消费者，准备消费数据
+		bin/kafka-console-consumer.sh --bootstrap-server hadoop1:9092 --topic ods_base_log
+	2）启动nginx服务采集服务集群
+		cd /opt/module/gmall-flink/bin
+		./logger.sh start
+
+		测试是否启动：
+		ps -ef | grep "gmall-logger-0.0.1-SNAPSHOT.jar"
+
+		或者使用jps查看
+
+	3）运行模拟生成数据的jar
+		cd /opt/module/gmall-flink/rt_applog
+		$ java -jar gmall2020-mock-log-2020-12-18.jar
+
+
+

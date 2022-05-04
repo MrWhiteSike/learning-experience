@@ -1,0 +1,144 @@
+Nginx 
+("engine x") 是一个高性能的HTTP和反向代理服务器,特点是占有内存少，并发能力强，事实上nginx的并发能力确实在同类型的网页服务器中表现较好
+
+
+正向代理，代理的是客户端
+反向代理，代理的是服务器
+
+Nginx主要应用：
+1.静态网站部署
+2.负载均衡
+3.静态代理
+4.动静分离
+
+nginx安装以及命令：
+参考：https://www.cnblogs.com/fireblackman/p/15692833.html
+https://blog.csdn.net/cunchi4221/article/details/107477942
+
+
+配置负载均衡：
+修改nginx的nginx.conf文件
+在http中添加如下内容：
+upstream logcluster{
+	server hadoop1:8081 weight=1;
+	server hadoop2:8081 weight=1;
+	server hadoop3:8081 weight=1;
+}
+
+server {
+    listen 80;
+    server_name  www.xxx.com;
+    location / {
+    	# 使用哪个负载均衡
+        proxy_pass http://logcluster;
+        proxy_connect_timeout 10;
+    }
+}
+
+
+nginx.conf文件全部内容如下：
+
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+	worker_connections 768;
+	# multi_accept on;
+}
+
+http {
+
+	##
+	# Basic Settings
+	##
+
+	#sendfile on;
+	#tcp_nopush on;
+	#tcp_nodelay on;
+	#keepalive_timeout 65;
+	#types_hash_max_size 2048;
+	# server_tokens off;
+
+	# server_names_hash_bucket_size 64;
+	# server_name_in_redirect off;
+
+	#include /etc/nginx/mime.types;
+	#default_type application/octet-stream;
+
+	##
+	# SSL Settings
+	##
+
+	#ssl_protocols TLSv1 TLSv1.1 TLSv1.2; # Dropping SSLv3, ref: POODLE
+	#ssl_prefer_server_ciphers on;
+
+	##
+	# Logging Settings
+	##
+
+	#access_log /var/log/nginx/access.log;
+	#error_log /var/log/nginx/error.log;
+
+	##
+	# Gzip Settings
+	##
+
+	gzip on;
+
+	# gzip_vary on;
+	# gzip_proxied any;
+	# gzip_comp_level 6;
+	# gzip_buffers 16 8k;
+	# gzip_http_version 1.1;
+	# gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+	upstream logcluster{
+		server 192.168.36.121:8081 weight=1;
+		server 192.168.36.122:8081 weight=1;
+		server 192.168.36.123:8081 weight=1;
+	}
+
+	server{
+		listen 80;
+		server_name localhost;
+
+		location / {
+			proxy_pass http://logcluster;
+			proxy_connect_timeout 10;
+		}
+	}
+
+	##
+	# Virtual Host Configs
+	##
+
+	#include /etc/nginx/conf.d/*.conf;
+	#include /etc/nginx/sites-enabled/*;
+}
+
+
+#mail {
+#	# See sample authentication script at:
+#	# http://wiki.nginx.org/ImapAuthenticateWithApachePhpScript
+# 
+#	# auth_http localhost/auth.php;
+#	# pop3_capabilities "TOP" "USER";
+#	# imap_capabilities "IMAP4rev1" "UIDPLUS";
+# 
+#	server {
+#		listen     localhost:110;
+#		protocol   pop3;
+#		proxy      on;
+#	}
+# 
+#	server {
+#		listen     localhost:143;
+#		protocol   imap;
+#		proxy      on;
+#	}
+#}
+
+
+
