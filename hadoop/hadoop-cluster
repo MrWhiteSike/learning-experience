@@ -1,0 +1,184 @@
+hadoop-cluster
+
+Hadoop集群安装配置教程_Hadoop3.1.3_Ubuntu
+参考：
+http://dblab.xmu.edu.cn/blog/2441-2/
+http://dblab.xmu.edu.cn/blog/2775-2/
+
+当Hadoop采用分布式模式部署和运行时，存储采用分布式文件系统HDFS，而且，HDFS的名称节点和数据节点位于不同机器上。这时，数据就可以分布到多个节点上，不同数据节点上的数据计算可以并行执行，这时的MapReduce分布式计算能力才能真正发挥作用。
+
+使用两个节点（两台物理机器）来搭建集群环境，一台机器作为 Master节点，局域网IP地址为192.168.36.121，另两台机器作为 Slave 节点，局域网 IP 地址为192.168.36.122，192.168.36.123。
+分别在各个节点上修改hosts文件：
+vim /etc/hosts
+增加如下三条IP和主机名映射关系：
+192.168.36.121   hadoop1
+192.168.36.122   hadoop2
+192.168.36.123   hadoop3
+
+Hadoop 集群的安装配置大致包括以下步骤：
+（1）步骤1：选定一台机器作为 Master；
+（2）步骤2：在Master节点上安装SSH服务端、安装Java环境；
+（3）步骤3：在Master节点上安装Hadoop，并完成配置；
+（4）步骤4：在其他Slave节点上安装SSH服务端、安装Java环境；
+（5）步骤5：将Master节点上的“/opt/module/hadoop”目录复制到其他Slave节点上；
+（6）步骤6：在Master节点上开启Hadoop；
+
+具体步骤如下：
+1、下载并上传
+hadoop官网地址：https://www.apache.org/dyn/closer.cgi/hadoop/common/hadoop-3.1.3/hadoop-3.1.3.tar.gz 
+2、解压 Hadoop 安装包，安装至 /opt/module/ 
+	cd /opt/module
+	tar -zxvf hadoop-3.1.3.tar.gz
+	mv hadoop-3.1.3 hadoop
+3、配置path变量
+	vim ~/.bashrc 
+	添加如下内容：
+	export PATH=$PATH:/opt/module/hadoop/bin:/opt/module/hadoop/sbin
+	保存后执行命令source ~/.bashrc ，使配置生效。
+	配置path变量之后，就可以在任意目录中直接使用hadoop、hdfs等命令了！
+4、修改配置文件
+	需要修改“/opt/module/hadoop/etc/hadoop”目录下的配置文件
+	4.1 修改文件hadoop-env.sh 
+		vim hadoop-env.sh
+		添加如下内容：export JAVA_HOME=/usr/java/jdk1.8.0_131
+	4.2 修改文件workers
+		需要把所有数据节点的主机名写入该文件，每行一个，默认为 localhost（即把本机作为数据节点），所以，在伪分布式配置时，就采用了这种默认的配置，使得节点既作为名称节点也作为数据节点。在进行分布式配置时，可以保留localhost，让Master节点同时充当名称节点和数据节点，或者也可以删掉localhost这行，让Master节点仅作为名称节点使用。
+		添加如下：
+		hadoop2
+		hadoop3
+	4.3 修改文件core-site.xml
+		修改为如下内容：
+		<configuration>
+		  <property>
+		          <name>fs.defaultFS</name>
+		          <value>hdfs://hadoop1:8020</value>
+		  </property>
+		  <property>
+		          <name>hadoop.tmp.dir</name>
+		          <value>file:/opt/module/hadoop/tmp</value>
+		          <description>Abase for other temporary directories.</description>
+		  </property>
+		</configuration>
+
+	4.4 修改文件hdfs-site.xml
+		对于Hadoop的分布式文件系统HDFS而言，一般都是采用冗余存储，冗余因子通常为3，也就是说，一份数据保存三份副本，所以，dfs.replication的值还是设置为 3
+		修改为如下内容：
+		<configuration>
+		  <property>
+		          <name>dfs.namenode.secondary.http-address</name>
+		          <value>hadoop1:50090</value>
+		  </property>
+		  <property>
+		          <name>dfs.replication</name>
+		          <value>3</value>
+		  </property>
+		  <property>
+		          <name>dfs.namenode.name.dir</name>
+		          <value>file:/opt/module/hadoop/tmp/dfs/name</value>
+		  </property>
+		  <property>
+		          <name>dfs.datanode.data.dir</name>
+		          <value>file:/opt/module/hadoop/tmp/dfs/data</value>
+		  </property>
+		</configuration>
+
+	4.5 修改文件mapred-site.xml
+		修改为如下内容：
+		<configuration>
+		  <property>
+		          <name>mapreduce.framework.name</name>
+		          <value>yarn</value>
+		  </property>
+		  <property>
+		          <name>mapreduce.jobhistory.address</name>
+		          <value>hadoop1:10020</value>
+		  </property>
+		  <property>
+		          <name>mapreduce.jobhistory.webapp.address</name>
+		          <value>hadoop1:19888</value>
+		  </property>
+		  <property>
+		          <name>yarn.app.mapreduce.am.env</name>
+		          <value>HADOOP_MAPRED_HOME=/opt/module/hadoop</value>
+		  </property>
+		  <property>
+		          <name>mapreduce.map.env</name>
+		          <value>HADOOP_MAPRED_HOME=/opt/module/hadoop</value>
+		  </property>
+		  <property>
+		          <name>mapreduce.reduce.env</name>
+		          <value>HADOOP_MAPRED_HOME=/opt/module/hadoop</value>
+		  </property>
+		</configuration>
+
+	4.6 修改文件 yarn-site.xml
+		修改为如下内容：
+		<configuration>
+		  <property>
+		          <name>yarn.resourcemanager.hostname</name>
+		          <value>hadoop1</value>
+		  </property>
+		  <property>
+		          <name>yarn.nodemanager.aux-services</name>
+		          <value>mapreduce_shuffle</value>
+		  </property>
+		</configuration>
+
+5、把/opt/module/hadoop复制到其他节点上
+	如果之前已经运行过伪分布式模式，建议在切换到集群模式之前首先删除之前在伪分布式模式下生成的临时文件。
+	cd /opt/module
+	rm -r ./hadoop/tmp     # 删除 Hadoop 临时文件
+	rm -r ./hadoop/logs/*   # 删除日志文件
+	tar -zxcf hadoop.tar.gz ./hadoop   # 先压缩再复制
+	scp ./hadoop.tar.gz hadoop2:/opt/module
+	scp ./hadoop.tar.gz hadoop3:/opt/module
+
+6、然后在其他节点上执行如下命令：
+	cd /opt/module
+	rm -r ./hadoop    # 删掉旧的（如果存在）
+	tar -zxvf hadoop.tar.gz
+
+7、名称节点的格式化
+	首次启动Hadoop集群时，需要先在Master节点执行名称节点的格式化（只需要执行这一次，后面再启动Hadoop时，不要再次格式化名称节点）
+	hdfs namenode -format
+
+8、启动Hadoop集群，需要在Master节点上进行
+	start-dfs.sh
+	start-yarn.sh
+	mr-jobhistory-daemon.sh start historyserver
+
+9、验证是否正确启动
+	通过命令jps可以查看各个节点所启动的进程。如果已经正确启动，则在Master节点上可以看到NameNode、ResourceManager、SecondrryNameNode和JobHistoryServer以及DataNode和NodeManager进程
+	在Slave节点可以看到DataNode和NodeManager进程
+	缺少任一进程都表示出错。另外还需要在Master节点上通过命令“hdfs dfsadmin -report”查看数据节点是否正常启动，如果屏幕信息中的“Live datanodes”不为 0 ，则说明集群启动成功。
+	也可以在Linux系统的浏览器中输入地址“http://hadoop1的ip:9870/”，通过 Web 页面看到查看名称节点和数据节点的状态。如果不成功，可以通过启动日志排查原因。
+
+10、查看运行实例
+	在执行过程中，可以在Linux系统中打开浏览器，在地址栏输入“http://master IP:8088/cluster”，通过Web界面查看任务进度，在Web界面点击 “Tracking UI” 这一列的History连接，可以看到任务的运行信息
+
+11、关闭Hadoop集群
+	关闭Hadoop集群，需要在Master节点执行如下命令：
+	stop-yarn.sh
+	stop-dfs.sh
+	mr-jobhistory-daemon.sh stop historyserver
+	
+至此，就顺利完成了Hadoop集群搭建。
+
+出现的错误以及解决方法：
+./start-dfs.sh 切换到root用户执行命令
+Attempting to operate on hdfs namenode as root的方法
+解决方案一：
+输入如下命令，在环境变量中添加下面的配置
+vi /etc/profile
+然后向里面加入如下的内容
+export HDFS_NAMENODE_USER=root
+export HDFS_DATANODE_USER=root
+export HDFS_SECONDARYNAMENODE_USER=root
+export YARN_RESOURCEMANAGER_USER=root
+export YARN_NODEMANAGER_USER=root
+输入如下命令使改动生效
+source /etc/profile
+
+参考：https://www.codenong.com/cs108897129/
+
+

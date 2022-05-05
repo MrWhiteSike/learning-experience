@@ -1,0 +1,139 @@
+flink-standalone
+
+flink-standalone 集群搭建
+
+集群规划:
+- 服务器: hadoop1(Master + Slave): JobManager + TaskManager
+- 服务器: hadoop2(Master + Slave): JobManager + TaskManager
+- 服务器: hadoop3(Slave): TaskManager
+
+安装flink集群前的准备工作：
+
+1. 每个节点的操作：
+	1、添加主机名映射
+	vim /etc/hosts
+	添加IP 主机名 映射
+	192.168.36.121 hadoop1
+	192.168.36.122 hadoop2
+	192.168.36.123 hadoop3
+	2、安装jdk1.8+，java环境配置
+
+2. 启动zookeeper集群
+
+3. 启动hdfs
+
+
+安装Flink的步骤：
+
+1、下载
+https://flink.apache.org/downloads.html
+
+2、上传Linux（Ubuntu）并解压
+cd /opt/module
+tar xvf flink-1.12.7-bin-scala_2.12.tgz
+mv flink-1.12.7 flink
+
+3、配置环境变量
+vim ~/.bashrc
+添加
+export FLINK_HOME=/opt/module/flink
+export PATH=$PATH:$FLINK_HOME/bin
+为了执行start-cluster.sh 等集群命令，在任何地方都可以方便执行。
+
+4、修改flink-conf.yaml，配置HA以及状态后端和状态检查点元数据保存文件路径
+vim /opt/module/flink/conf/flink-conf.yaml
+修改：
+jobmanager.rpc.address: hadoop1
+taskmanager.numberOfTaskSlots: 2
+添加：
+high-availability: zookeeper
+high-availability.storageDir: hdfs://hadoop1:8020/flink/ha/
+high-availability.zookeeper.quorum: hadoop1:2181,hadoop2:2181,hadoop3:2181
+state.backend: filesystem
+state.checkpoints.dir: hdfs://hadoop1:8020/flink-checkpoints
+
+配置解释：
+#开启HA，使用文件系统作为快照存储
+state.backend: filesystem
+ 
+#启用检查点，可以将快照保存到HDFS
+state.checkpoints.dir: hdfs://hadoop1:8020/flink-checkpoints
+ 
+#使用zookeeper搭建高可用
+high-availability: zookeeper
+ 
+# 存储JobManager的元数据到HDFS
+high-availability.storageDir: hdfs://hadoop1:8020/flink/ha/
+ 
+# 配置ZK集群地址
+high-availability.zookeeper.quorum: hadoop1:2181,hadoop2:2181,hadoop3:2181
+
+5、修改masters
+vim /opt/module/flink/conf/masters
+修改为：
+hadoop1:8081
+hadoop2:8081
+
+6、修改workers
+vim /opt/module/flink/conf/workers
+修改为：
+hadoop1
+hadoop2
+hadoop3
+
+7、将/opt/module/flink分发到hadoop2，hadoop3节点
+cd /opt/module
+先压缩再分发
+tar cf flink.tar ./flink
+scp ./flink.tar hadoop2:/opt/module
+scp ./flink.tar hadoop3:/opt/module
+
+8、修改hadoop2上的flink-conf.yaml
+vim /opt/module/flink/conf/flink-conf.yaml
+jobmanager.rpc.address: hadoop2
+
+9、下载Flink整合Hadoop的jar包，放入flink/lib目录并分发
+在Flink1.8版本后,Flink官方提供的安装包里没有整合HDFS的jar
+下载jar包并在Flink的lib目录下放入该jar包并分发使Flink能够支持对Hadoop的操作
+下载地址：
+https://flink.apache.org/downloads.html#apache-flink-1127
+Additional Components中
+也可以通过如下链接地址直接进行下载：
+https://repo.maven.apache.org/maven2/org/apache/flink/flink-shaded-hadoop-2-uber/2.7.5-10.0/flink-shaded-hadoop-2-uber-2.7.5-10.0.jar
+
+分发：
+scp -r ./flink-shaded-hadoop-2-uber-2.7.5-10.0.jar hadoop2:/opt/module/flink/lib
+scp -r ./flink-shaded-hadoop-2-uber-2.7.5-10.0.jar hadoop3:/opt/module/flink/lib
+
+10、启动Flink集群
+在hadoop1上执行
+/opt/module/flink/bin/start-cluster.sh
+
+11、使用jps命令查看启动进程情况
+# 在所有机器上执行
+jps
+
+12、查看日志
+如果发现Flink相关进程没启动，可以查看日志，通过错误日志进行问题分析并解决
+cat /opt/module/flink/log/flink-root-standalonesession-0-ubuntu.log
+
+13、测试
+1、本地window机器访问WebUI
+http://192.168.36.121:8081/#/job-manager/config
+http://192.168.36.122:8081/#/job-manager/config
+2、执行wc
+flink run /opt/module/flink/examples/batch/WordCount.jar
+3、kill掉其中一个master
+4、重新执行wc，还是可以正常执行
+flink run /opt/module/flink/examples/batch/WordCount.jar
+达到高可用的目的
+
+14、停止集群
+stop-cluster.sh
+
+
+
+
+
+
+

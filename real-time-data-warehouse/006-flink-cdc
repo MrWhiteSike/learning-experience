@@ -24,3 +24,5 @@
 	Flink社区开发了flink-cdc-connectors组件，这是一个可以直接从MySQL、PostgreSQL等数据库直接 读取全量数据 和 增量变更数据 的source 组件。
 	目前已经开源，开源地址：https://github.com/ververica/flink-cdc-connectors
 
+
+flink run -m hadoop2:8081 -c com.bsk.flink.cdc.FlinkCDC ./gmall-flink-cdc.jar
