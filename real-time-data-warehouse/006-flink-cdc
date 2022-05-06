@@ -24,5 +24,43 @@
 	Flink社区开发了flink-cdc-connectors组件，这是一个可以直接从MySQL、PostgreSQL等数据库直接 读取全量数据 和 增量变更数据 的source 组件。
 	目前已经开源，开源地址：https://github.com/ververica/flink-cdc-connectors
 
+FlinkCDC案例实操：
+1.DataStream方式的应用
+首次提交任务：
+cd /opt/module/flink-local
+bin/flink run -m hadoop1:8081 -c com.bsk.flink.cdc.FlinkCDC ./gmall-flink-cdc.jar
 
-flink run -m hadoop2:8081 -c com.bsk.flink.cdc.FlinkCDC ./gmall-flink-cdc.jar
+假如没有设置checkpoint，可以使用savepoint，手动进行保存
+保存成功后可以通过WebUI查看Hadoop的文件系统，浏览器输入http://ip:9870 进行访问页面Utilities 下的Browse the file system
+比如：http://192.168.36.121:9870/
+
+从某个savepoint提交任务：
+cd /opt/module/flink-local
+bin/flink run -m hadoop1:8081 -s hdfs://hadoop1:8020/gmall-flink/savepoint/savepoint-711755-7ab6e9e763a1 -c com.bsk.flink.cdc.FlinkCDC ./gmall-flink-cdc.jar
+
+Flink可以实现断点续传功能：需要依赖savepoint或者checkpoint来实现，
+还可以读全量数据，再增量读取数据！
+
+2.FlinkSQL方式的应用 
+
+
+FlinkCDC：
+	DataStream：
+		优点：多库多表
+		缺点：需要自定义反序列化器
+
+	FlinkSQL：
+		优点：不需要自定义反序列化器
+		缺点：单表
+
+				 FlinkCDC         Maxwell 			Canal
+断点续传           Checkpoint      Mysql           本地磁盘
+
+SQL对的数据影响     无                无         一对一（炸开）
+初始化功能         有（多库多表）   有（单表）         无
+封装格式         自定义              json            json（c/s 自定义）
+高可用          运行任务集群高可用   无              集群（配置ZK）
+
+通过以上对比，发现FlinkCDC 更优
+	
+
