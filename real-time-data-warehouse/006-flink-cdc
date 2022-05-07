@@ -56,7 +56,7 @@ FlinkCDC：
 				 FlinkCDC         Maxwell 			Canal
 断点续传           Checkpoint      Mysql           本地磁盘
 
-SQL对的数据影响     无                无         一对一（炸开）
+SQL对数据的影响     无                无         一对一（炸开）
 初始化功能         有（多库多表）   有（单表）         无
 封装格式         自定义              json            json（c/s 自定义）
 高可用          运行任务集群高可用   无              集群（配置ZK）

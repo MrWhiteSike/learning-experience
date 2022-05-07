@@ -13,6 +13,14 @@ public class FlinkCDC {
         // 1.获取执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
+        // 设置ck 以及 状态后端：生产环境中必须设置，测试中可以先进行关闭便于测试业务逻辑代码
+//        env.setStateBackend(new FsStateBackend("hdfs://192.168.36.121:8020/gmall-flink/ck"));
+//        env.enableCheckpointing(5000L); // 生产环境中一般设置为5min 或者 10min；头和头之间的时间间隔
+//        env.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
+//        env.getCheckpointConfig().setCheckpointTimeout(10000L); // 生产环境中，根据任务状态大小，进行合理设置
+//        env.getCheckpointConfig().setMaxConcurrentCheckpoints(2);
+//        env.getCheckpointConfig().setMinPauseBetweenCheckpoints(3000L); // 两个checkpoint之间最小间隔时间，尾和头之间时间间隔
+
         // 2.通过FlinkCDC构建SourceFunction并读取数据
         DebeziumSourceFunction<String> sourceFunction = MySQLSource.<String>builder()
 //                .hostname("192.168.36.121")
