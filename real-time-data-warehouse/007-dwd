@@ -1,0 +1,61 @@
+007-dwd
+
+日志数据的DWD层：
+1.新老用户识别（状态编程，map 的RichMapFunction 中定义状态，记录首次登录的状态，修改is_new = 1 的偏差数据），前提是对mid进行keyby分组
+2.分流（侧输出流）：
+脏数据 -- > Kafka dirty 主题
+启动日志 -->  kafka dwd_start_log 主题
+页面日志 -->  kafka dwd_page_log 主题
+曝光日志 -->  kafka dwd_display_log 主题
+
+
+业务数据的DWD层
+动态分流的几种实现方案：
+1.利用zookeeper进行存储，通过watch感知数据变化
+2.利用MySQL进行存储，周期性同步
+3.利用MySQL进程存储，使用广播流实时获取
+
+
+选择第三种方案: 主要是MySQL多于配置数据局初始化和维护管理，使用FlinkCDC读取配置信息表，将配置流作为广播流与主流进行连接
+具体实现：
+动态分流：主流 + 广播流（FlinkCDC实时读取MySQL中的配置表table_process）进行连接，然后进行维度和事实数据的分流操作
+维度数据 -->  HBase
+事实数据 -->  Kafka
+
+新建数据库：gmall-realtime
+为该库开启binlog
+vim /etc/mysql/mysql.conf.d/mysqld.cnf
+添加：
+binlog_do_db            = gmall-realtime
+验证是否开启：
+ll /var/log/mysql
+对数据库的表进行增删改时，binlog是否有变化，有变化表示该库的binlog已开启。
+
+table_process 字段分析：
+sourceTable      type         sinkType      sinkTable
+base_trademark   insert        hbase         dim_xxx （Phoenix表名）
+order_info       insert        kafka         dwd_xxa  (主题名)
+order_info       update        kafka         dwd_xxb  (主题名)
+
+主键：sourceTable+type
+
+手动建表
+hbase 要自动建表：
+需要的其他字段：
+sinkColumns  pk（主键） extend
+sinkColumns ： 有两个作用，1.建表时使用 2.主流过滤时使用
+
+
+程序流程分析：
+
+广播流：
+	1.解析数据 String --> TableProcess
+	2.检查hbase表是否存在并建表
+	3.写入状态
+主流：
+	1.读取状态
+	2.过滤数据
+	3.分流
+
+
+
