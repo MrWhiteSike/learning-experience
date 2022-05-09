@@ -69,7 +69,6 @@ public class BaseDBApp {
         kafka.print("Kafka>>>>>>>>>>>>");
         hbase.print("HBase>>>>>>>>>>>>");
 
-
         // 11. 执行任务
         env.execute("BaseDBApp");
     }

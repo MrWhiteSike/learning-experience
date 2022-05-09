@@ -1,0 +1,41 @@
+phoenix
+
+phoenix 安装
+参考：https://blog.csdn.net/qq_40751062/article/details/122695887
+
+
+1、下载
+Phoenix官方下载地址：https://phoenix.apache.org/download.html
+https://www.apache.org/dyn/closer.lua/phoenix/phoenix-5.1.2/phoenix-hbase-2.2-5.1.2-bin.tar.gz
+
+2、解压并修改文件名
+tar -zxvf ./phoenix-hbase-2.2-5.1.2-bin.tar.gz
+mv phoenix-hbase-2.2-5.1.2-bin phoenix
+
+3、软连接hbase安装目录的hbase-site.xml
+cd /opt/module/phoenix/bin
+ln -sf /opt/module/hbase/conf/hbase-site.xml
+
+4、分发集群文件
+cd /opt/module
+scp -r ./phoenix hadoop2:/opt/module
+scp -r ./phoenix hadoop3:/opt/module
+
+5、启动验证
+cd /opt/module
+先启动hdfs集群和zookeeper集群
+start-dfs.sh 
+zookeeper/bin/zk.sh start
+启动hbase集群
+hbase/bin/start-hbase.sh
+启动Phoenix(先安装Python)
+phoenix/bin/sqlline.py
+
+验证：
+输入 !table 
+输出： 一张表，表中有8张系统表
+
+
+
+命令操作：
+https://blog.csdn.net/qq_41665356/article/details/80277350

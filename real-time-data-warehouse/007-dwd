@@ -58,4 +58,26 @@ sinkColumns ： 有两个作用，1.建表时使用 2.主流过滤时使用
 	3.分流
 
 
+测试：
+
+启动HDFS集群，zookeeper集群，kafka集群，HBase集群
+
+Phoenix执行客户端
+bin/sqlline.py
+
+先创建GMALL_REALTIME库
+> create schema GMALL_REALTIME;
+
+
+问题：业务数据DWD 层逻辑代码测试？
+
+
+
+
+
+
+
+
+
+
 

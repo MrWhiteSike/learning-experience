@@ -1,0 +1,139 @@
+hbase-cluster
+
+HBase集群安装
+参考：https://blog.csdn.net/qq_43224174/article/details/122242582
+
+1.下载
+https://archive.apache.org/dist/hbase/2.0.5/hbase-2.0.5-bin.tar.gz
+https://archive.apache.org/dist/hbase/2.2.4/hbase-2.2.4-bin.tar.gz
+
+2、上传并解压
+cd /opt/module
+tar -zxvf ./hbase-2.0.5-bin.tar.gz
+mv hbase-2.0.5 hbase/mv hbase-2.2.4 hbase
+
+3、修改配置文件
+cd /opt/module/hbase/conf
+
+3.1 修改hbase-env.sh文件
+vim hbase-env.sh
+添加：
+export HBASE_MANAGES_ZK=false
+
+3.2 修改hbase-site.xml
+vim hbase-site.xml
+修改为：
+<configuration>
+    <property>
+        <name>hbase.rootdir</name>
+        <value>hdfs://hadoop1:8020/hbase</value>
+    </property>
+
+    <property>
+        <name>hbase.cluster.distributed</name>
+        <value>true</value>
+    </property>
+
+    <property>
+        <name>hbase.zookeeper.quorum</name>
+        <value>hadoop1,hadoop2,hadoop3</value>
+    </property>
+
+</configuration>
+
+3.3 修改regionservers文件
+localhost删除
+添加：
+hadoop1
+hadoop2
+hadoop3
+
+4、分发hbase
+scp -r ./hbase hadoop2:/opt/module
+scp -r ./hbase hadoop3:/opt/module
+
+5、Hbase服务启动
+启动Hbase前一定要启动hadoop集群和Zookeeper集群！！！
+
+群起：
+cd /opt/module/hbase
+bin/start-hbase.sh
+群停：
+bin/stop-hbase.sh
+
+6、查看HBase 页面
+启动成功后，可以通过“host:port”的方式来访问HBase管理页面，例如：
+http://hadoop1:16010 
+
+问题：配置Hbase连接不上16010web页面？
+参考：https://blog.csdn.net/weixin_46684938/article/details/118223815?spm=1001.2101.3001.6650.1&utm_medium=distribute.pc_relevant.none-task-blog-2%7Edefault%7ECTRLIST%7Edefault-1-118223815-blog-111412070.pc_relevant_aa&depth_1-utm_source=distribute.pc_relevant.none-task-blog-2%7Edefault%7ECTRLIST%7Edefault-1-118223815-blog-111412070.pc_relevant_aa&utm_relevant_index=2
+
+解决方案：
+3.更换habse版本
+我更换成了2.2.4版本
+首先：
+删除zookeeper的注册信息；
+bin/zkCli.sh
+> ls /
+> deleteall /hbase
+...
+
+删除hbase的数据目录
+hdfs dfs -rm -r hdfs://hadoop1:8020/hbase
+
+报错：
+java.lang.IllegalStateException: The procedure WAL relies on the ability to hsync for proper operation 
+during component failures, but the underlying filesystem does not support doing so. 
+Please check the config value of ‘hbase.procedure.store.wal.use.hsync’ to set the desired level of 
+robustness and ensure the config value of ‘hbase.wal.dir’ points to a FileSystem mount that can provide it.
+
+在hbase-site.xml增加配置
+<property>
+    <name>hbase.unsafe.stream.capability.enforce</name>
+    <value>false</value>
+</property>
+
+然后这个文件同步到其他节点，然后重启。
+scp -r ./hbase/conf/hbase-site.xml hadoop2:/opt/module/hbase/conf
+scp -r ./hbase/conf/hbase-site.xml hadoop3:/opt/module/hbase/conf
+
+./hbase/bin/start-hbase.sh
+
+
+整个hbase-site.xml的内容：
+<configuration>
+<property>
+    <name>hbase.rootdir</name>
+    <value>hdfs://hadoop1:8020/hbase</value>
+  </property>
+
+  <property>
+    <name>hbase.cluster.distributed</name>
+    <value>true</value>
+  </property>
+  
+ <property>
+    <name>hbase.zookeeper.quorum</name>
+    <value>hadoop1,hadoop2,hadoop3</value>
+  </property>
+  
+  
+<!-- 解决启动HMaster无法初始化WAL的问题 -->
+  <property>
+    <name>hbase.unsafe.stream.capability.enforce</name>
+    <value>false</value>
+  </property>
+  
+    <!-- Phoenix 支持HBase 命名空间映射 -->
+  <property>
+    <name>phoenix.schema.isNamespaceMappingEnabled</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>phoenix.schema.mapSystemTablesToNamespace</name>
+    <value>true</value>
+  </property>
+
+</configuration>
+
