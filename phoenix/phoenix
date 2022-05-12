@@ -31,6 +31,8 @@ hbase/bin/start-hbase.sh
 启动Phoenix(先安装Python)
 phoenix/bin/sqlline.py
 
+注意：等hbase集群启动完成，才能启动Phoenix
+
 验证：
 输入 !table 
 输出： 一张表，表中有8张系统表

@@ -43,7 +43,7 @@ $ mysql -u debian-sys-maint -p
 
 >> use mysql;
 >> update mysql.user set authentication_string=password('your_new_pasword') where user='root' and Host ='localhost';
->> update user set plugin="mysql_native_password";
+>> update mysql.user set plugin="mysql_native_password";
 >> flush privileges;
 
 7.重启数据库
@@ -60,8 +60,8 @@ $ mysql -uroot -p
 
 9.1 编辑文件 /etc/mysql/mysql.conf.d/mysqld.cnf，注释掉 bind-address = 127.0.0.1
 
-$ sudo vi /etc/mysql/mysql.conf.d/mysqld.cnf
-1
+$ sudo vim /etc/mysql/mysql.conf.d/mysqld.cnf
+
 9.2 保存退出，然后登录 mysql 服务,执行如下命令，其中connect_pasword 建议与你本地的登录密码保持一致。
 
 >> grant all on *.* to root@'%' identified by 'connect_pasword' with grant option;

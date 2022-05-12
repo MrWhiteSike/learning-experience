@@ -64,20 +64,90 @@ sinkColumns ： 有两个作用，1.建表时使用 2.主流过滤时使用
 
 Phoenix执行客户端
 bin/sqlline.py
-
-先创建GMALL_REALTIME库
+然后创建schema GMALL_REALTIME
 > create schema GMALL_REALTIME;
 
+执行ODS层的FlinkCDC程序，出现binlog连接信息表示运行成功
 
-问题：业务数据DWD 层逻辑代码测试？
-
-
-
-
+执行DWD层的BaseDBApp程序，出现biglog连接信息表示运行成功并且打印如下建表语句
+create table if not exists GMALL_REALTIME.dim_base_trademark(id varchar primary key ,tm_name varchar )
 
 
+create table if not exists GMALL_REALTIME.dim_base_trademark(id varchar primary key ,tm_name varchar )
+
+业务数据维度表新增数据 && 在配置表中添加该表的 insert 操作类型 && hbase 输出类型的配置记录
+HBase>>>>>>>>>>>>> {"sinkTable":"dim_base_trademark","database":"gmall-flink","before":{},"after":{"tm_name":"期望","id":13},"type":"insert","tableName":"base_trademark"}
+
+该组合Key ： base_trademark-update不存在！
+如果想保留某个表A的 update 操作的数据，可以在配置表中为表A添加一条update类型的配置记录
+
+create table if not exists GMALL_REALTIME.dim_base_trademark(id varchar primary key ,tm_name varchar )
+HBase>>>>>>>>>>>>> {"sinkTable":"dim_base_trademark","database":"gmall-flink","before":{"tm_name":"adww","logo_url":"tews","id":12},"after":{"tm_name":"a","id":12},"type":"update","tableName":"base_trademark"}
+
+如果是业务数据事实表：
+
+在配置表中添加某个来源表的 insert 操作类型 && kafka 输出类型 
+
+Kafka>>>>>>>>>>>>> {"sinkTable":"dwd_order_info","database":"gmall-flink","before":{},"after":{"user_id":2022,"id":26449},"type":"insert","tableName":"order_info"}
+
+
+如果没有配置update操作类型的配置记录，就会打印不存在
+该组合Key ： order_info-update不存在！
+
+如果想要保留update操作类型的数据：
+在配置表中添加某个来源表的 update 操作类型 && kafka 输出类型 
+
+Kafka>>>>>>>>>>>>> {"sinkTable":"dwd_order_info","database":"gmall-flink","before":{"user_id":2021,"id":26449},"after":{"user_id":2022,"id":26449},"type":"update","tableName":"order_info"}
+
+
+测试成功！
+宿主机：8G内存，1个CPU 8核
+
+VMware Workstations：
+多个操作系统的内存&CPU参数配置如下，
+hadoop1:  内存=5G，CPU=1
+hadoop2:  内存=2.5G，CPU=1
+hadoop3:  内存=3G，CPU=1
+
+
+编辑 --> 首选项 --> 内存
+预留内存：6315MB（总内存8084M）
+额外内存：选择 允许交换部分虚拟机内存 选项
 
 
 
+
+总结：
+
+ODS ：
+	数据源：行为数据，业务数据
+	架构分析：
+	FlinkCDC：
+		DataStream vs FlinkSQL
+		FlinkCDC/Maxwell/Canal
+	保持数据原貌，不做任何修改
+	两个主题：ods_base_log, ods_base_db
+
+DWD-DIM：
+	行为数据：DWD（Kafka）
+		1、过滤脏数据 --> 侧输出流  得到脏数据率
+		2、新老用户识别  --> 前台校验不准 -- > 进行数据校准
+		3、分流 -->  侧输出流 页面，启动，曝光，动作，错误
+
+	业务数据：DWD（Kafka）-DIM（Phoenix）
+		1、过滤数据 --> 删除数据
+		2、读取配置表创建广播流
+		3、连接主流和广播流并处理
+			1）广播流数据处理：
+				a.解析数据
+				b.Phoenix 建表
+				c.写入状态广播
+			2）主流数据处理：
+				a、读取状态
+				b、过滤字段
+				c、分流 添加sinkTable字段
+		4、提取Kafka和HBase流分别对应的位置
+		5、HBase流：自定义 Sink
+		6、Kafka流：自定义序列化方式
 
 

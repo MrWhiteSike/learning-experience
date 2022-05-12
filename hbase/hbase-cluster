@@ -137,3 +137,7 @@ scp -r ./hbase/conf/hbase-site.xml hadoop3:/opt/module/hbase/conf
 
 </configuration>
 
+
+注意：
+只有当Hadoop退出安全模式时，查看http://hadoop1:9870/ 页面中出现 Security is off Safemode is off. 才能启动Hbase 集群
+

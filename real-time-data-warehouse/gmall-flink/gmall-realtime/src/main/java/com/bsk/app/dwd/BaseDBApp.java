@@ -6,6 +6,7 @@ import com.alibaba.ververica.cdc.connectors.mysql.MySQLSource;
 import com.alibaba.ververica.cdc.connectors.mysql.table.StartupOptions;
 import com.alibaba.ververica.cdc.debezium.DebeziumSourceFunction;
 import com.bsk.app.function.CustomDeserialization;
+import com.bsk.app.function.DimSinkFunction;
 import com.bsk.app.function.TableProcessFunction;
 import com.bsk.bean.TableProcess;
 import com.bsk.utils.MyKafkaUtil;
@@ -15,8 +16,15 @@ import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.*;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.connectors.kafka.KafkaSerializationSchema;
 import org.apache.flink.util.OutputTag;
+import org.apache.kafka.clients.producer.ProducerRecord;
 
+import javax.annotation.Nullable;
+
+
+// 数据流： web/app（客户端） -> nginx（负载均衡，反向代理） -> springboot服务 -> MySql -> FlinkApp -> kafka(ods) -> FlinkApp -> kafka(DWD)/Phoenix(DIM)
+// 程 序：                                                      MockDB.jar -> Mysql ->  FlinkCDC -> Kafka(zk) -> BaseDBApp -> kafka(zk)/ Phoenix(hbase,zk,hdfs)
 public class BaseDBApp {
     public static void main(String[] args) throws Exception {
         // 1. 获取执行环境
@@ -39,17 +47,18 @@ public class BaseDBApp {
             return !"delete".equals(type);
         });
         // 5. 打印测试
-        filterStream.print();
+//        filterStream.print();
         // 6.使用FlinkCDC消费配置表 并处理成     广播流
         DebeziumSourceFunction<String> sourceFunction = MySQLSource.<String>builder()
+//                .hostname("192.168.36.120")
                 .hostname("hadoop1")
                 .port(3306)
                 .username("root")
                 .password("123456")
                 .databaseList("gmall-realtime") // 数据库要开启bin_log
                 .tableList("gmall-realtime.table_process")
-                .startupOptions(StartupOptions.initial())
                 .deserializer(new CustomDeserialization())
+                .startupOptions(StartupOptions.initial())
                 .build();
         DataStreamSource<String> tableProcessStream = env.addSource(sourceFunction);
         MapStateDescriptor<String, TableProcess> mapStateDescriptor = new MapStateDescriptor<>("map-state", String.class, TableProcess.class);
@@ -68,6 +77,26 @@ public class BaseDBApp {
         // 10.将kafka数据写入Kafka主题，将HBase数据写入Phoenix表
         kafka.print("Kafka>>>>>>>>>>>>");
         hbase.print("HBase>>>>>>>>>>>>");
+
+        // 将HBase数据写入Phoenix表
+        /**
+         * 分析：
+         * 这里可以使用JdbcSink.sink()吗？
+         * 不可以，因为第一个参数：SQL语句中的字段数量不确定，第二个参数就无法进行 传参
+         * 解决办法：自定义sinkFunction
+         *
+         */
+        hbase.addSink(new DimSinkFunction());
+
+        // 将数据写入到kafka中
+        String sinkTopic = "dwd_base_db";
+        // 泛型：内部的类型没法写，谁用谁传具体的类型，然后写逻辑
+        kafka.addSink(MyKafkaUtil.getKafkaSink(new KafkaSerializationSchema<JSONObject>() {
+            @Override
+            public ProducerRecord<byte[], byte[]> serialize(JSONObject element, @Nullable Long timestamp) {
+                return new ProducerRecord<byte[], byte[]>(element.getString("sinkTable"), element.getString("after").getBytes());
+            }
+        }));
 
         // 11. 执行任务
         env.execute("BaseDBApp");

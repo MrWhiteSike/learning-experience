@@ -141,4 +141,5 @@ http {
 #}
 
 
-
+Linux中关闭nginx开机自启动：
+systemctl disable nginx
