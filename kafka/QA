@@ -1,0 +1,8 @@
+QA
+
+1、Timeout of 60000ms expired before the position for partition could be determined
+
+问题出现原因：kafka某个节点没有起来
+解决：将kafka所有节点启动起来
+
+

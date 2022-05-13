@@ -89,8 +89,7 @@ public class BaseDBApp {
         hbase.addSink(new DimSinkFunction());
 
         // 将数据写入到kafka中
-        String sinkTopic = "dwd_base_db";
-        // 泛型：内部的类型没法写，谁用谁传具体的类型，然后写逻辑
+        // 泛型：方法内部的类型不确定，不能在方法内部进行逻辑的编写；那么就只能利用参数将在方法外部创建的具体的对象传递到方法内部；即谁用谁传具体的类型，然后写逻辑
         kafka.addSink(MyKafkaUtil.getKafkaSink(new KafkaSerializationSchema<JSONObject>() {
             @Override
             public ProducerRecord<byte[], byte[]> serialize(JSONObject element, @Nullable Long timestamp) {

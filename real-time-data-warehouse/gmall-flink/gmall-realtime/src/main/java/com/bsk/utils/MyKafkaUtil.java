@@ -13,8 +13,7 @@ import java.util.Properties;
 
 public class MyKafkaUtil {
 //    private static String KAFKA_SERVER = "192.168.36.121:9092,192.168.36.122:9092,192.168.36.123:9092";
-//    private static String KAFKA_SERVER = "hadoop1:9092,hadoop2:9092,hadoop3:9092";
-    private static String KAFKA_SERVER = "hadoop3:9092";
+    private static String KAFKA_SERVER = "hadoop1:9092,hadoop2:9092,hadoop3:9092";
     private static Properties properties = new Properties();
     private static String default_topic = "dwd_default_topic";
 
