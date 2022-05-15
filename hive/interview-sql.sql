@@ -246,8 +246,332 @@ from
 where rn = 1
 
 
+Q：（腾讯）登录日志，计算每个人连续登录的最大天数？
+注意：断一天还算连续
+
+ id      	dt
+1001	2021-08-01
+1001	2021-08-02
+1001	2021-08-03
+1001	2021-08-05
+1001	2021-08-06
+1001	2021-08-07
+1001	2021-08-10
+1001	2021-08-12
+1002	2021-08-01
+1002	2021-08-02
+1002	2021-08-03
+1002	2021-08-07
+1002	2021-08-09
+1002	2021-08-11
+1002	2021-08-13
+1002	2021-08-15
+
+结果：
+用户id    连续登录天数days
+1001   			7
+1002   			9
+
+create table tx(id string, dt string) row format 
+
+
+思路1： 等差数列（等差相同）
+
+1.1 开窗，按照id分组同时按照dt排序,求Rank（注意：有数据重复要先去重，比如有两条
+1001	2021-08-01）
+
+create table tx(id int,dt string);
+
+select
+    id,
+    dt,
+    rank() over(partition by id order by dt) rk
+from tx;t1
+
++---------+-------------+-------------+
+| id  	  |     dt      |   rk  	  |
++---------+-------------+
+| 1001    | 2021-08-01  |    1
+| 1001    | 2021-08-02  |    2
+| 1001    | 2021-08-03  |    3
+| 1001    | 2021-08-05  |    4
+| 1001    | 2021-08-06  |    5
+| 1001    | 2021-08-07  |    6
+| 1001    | 2021-08-10  |    7
+| 1001    | 2021-08-12  |    8
+| 1002    | 2021-08-01  |
+| 1002    | 2021-08-02  |
+| 1002    | 2021-08-03  |
+| 1002    | 2021-08-07  |
+| 1002    | 2021-08-09  |
+| 1002    | 2021-08-11  |
+| 1002    | 2021-08-13  |
+| 1002    | 2021-08-15  |
++---------+-------------+
+
+1.2 将每行日期减去rk值，如果之前是连续的日期，则相减之后为相同日期
+select
+    id,
+    dt,
+    date_sub(dt,rk) flag
+from
+    (select
+    id,
+    dt,
+    rank() over(partition by id order by dt) rk
+from tx)t1;t2
+
+日期连续的减出来，flag值一样
++---------+-------------+-------------+
+| id  	  |     dt      |  flag  	  |
++---------+-------------+
+| 1001    | 2021-08-01  | 2021-07-31
+| 1001    | 2021-08-02  | 2021-07-31
+| 1001    | 2021-08-03  | 2021-07-31
+| 1001    | 2021-08-05  | 2021-08-01
+| 1001    | 2021-08-06  | 2021-08-01
+| 1001    | 2021-08-07  | 2021-08-01
+| 1001    | 2021-08-10  | 2021-08-03
+| 1001    | 2021-08-12  | 2021-08-04
+
+断一天的相减之后的，flag  值就连续了
+
+1.3 先计算绝对连续的天数
+select
+    id,
+    flag,
+    count(*) days
+from 
+    (select
+    id,
+    dt,
+    date_sub(dt,rk) flag
+from
+    (select
+    id,
+    dt,
+    rank() over(partition by id order by dt) rk
+from tx)t1)t2
+group by id,flag; t3
+
++---------+-------------+-------------+
+| id  	  |     flag    |  days  	  |
++---------+-------------+
+| 1001    | 2021-07-31  | 3
+| 1001    | 2021-08-01  | 3
+| 1001    | 2021-08-03  | 1
+| 1001    | 2021-08-04  | 1
 
 
 
+1.4 再计算连续问题 （再次求rank）
+select
+    id,
+    flag,
+    days,
+    rank() over(partition by id order by flag) newFlag
+from
+    t3;t4
+
++---------+-------------+-------------+
+| id  	  |     flag    |  days  	  |  newFlag
++---------+-------------+
+| 1001    | 2021-07-31  | 3                 1
+| 1001    | 2021-08-01  | 3                 2
+| 1001    | 2021-08-03  | 1                 3
+| 1001    | 2021-08-04  | 1                 4
 
 
+1.5 将flag 减去newFlag
+select
+    id,
+    days,
+    date_sub(flag,newFlag) flag
+from
+    t4;t5
+
++---------+-------------+-------------+
+| id  	  |     flag    |  days  	  |
++---------+-------------+
+| 1001    | 2021-07-30  | 3
+| 1001    | 2021-07-30  | 3
+| 1001    | 2021-07-31  | 1
+| 1001    | 2021-07-31  | 1
+
+
+1.6 计算每个用户连续登录的天数，断一天也算
+select
+    id,
+    flag,
+    sum(days)+count(*)-1 days
+from
+    t5
+group by id,flag;t6
+
+
+1.7 计算最大连续天数
+select
+    id,
+    max(days)
+from
+    t6
+group by id;
+
+最终SQL：
+select
+    id,
+    max(days)
+from
+    (select
+    id,
+    flag,
+    sum(days)+count(*)-1 days
+from
+    (select
+    id,
+    days,
+    date_sub(flag,newFlag) flag
+from
+    (select
+    id,
+    flag,
+    days,
+    rank() over(partition by id order by flag) newFlag
+from
+    (select
+    id,
+    flag,
+    count(*) days
+from 
+    (select
+    id,
+    dt,
+    date_sub(dt,rk) flag
+from
+    (select
+    id,
+    dt,
+    rank() over(partition by id order by dt) rk
+from tx)t1)t2
+group by id,flag)t3)t4)t5
+group by id,flag)t6
+group by id;
+
+注意：
+-1 的问题：前面都是聚合函数，分组的时候，1 没有分组，所以报错。
+解决：在最后进行 -1 操作，不影响最终结果
+
+断两天也算呢，套两层
+断五天呢，套5层
+这种方法比较麻烦，嵌套很多层
+
+思路2：分组思想，共同条件： 相减=1 || 相减=2的都可以
+
+2.1 将上一行数据下移
+select
+    id,
+    dt,
+    lag(dt,1,'1970-01-01') over(partition by id order by dt) lagDt
+from
+    tx;t1
+
+2.2 将当前行日期减去下移的日期
+select
+    id,
+    dt,
+    datadiff(dt,lagDt) dtDiff
+from
+    t1;t2
+
++---------+-------------+-------------+
+| id  	  |     dt      |  dtDiff  	  |
++---------+-------------+
+| 1001    | 2021-08-01  | 18840 
+| 1001    | 2021-08-02  | 1
+| 1001    | 2021-08-03  | 1
+| 1001    | 2021-08-05  | 2
+| 1001    | 2021-08-07  | 1
+| 1001    | 2021-08-06  | 1
+| 1001    | 2021-08-10  | 3
+| 1001    | 2021-08-12  | 2
+
+分组的规律： >2 的开始做分组 + 1
+
+2.3 分组
+select
+    id,
+    dt,
+    sum(if(dtDiff>2,1,0)) over(partition by id order by dt) flag
+from
+    t2;t3
+
++---------+-------------+-------------+
+| id  	  |     dt      |  flag  	  |
++---------+-------------+
+| 1001    | 2021-08-01  | 1
+| 1001    | 2021-08-02  | 1
+| 1001    | 2021-08-03  | 1
+| 1001    | 2021-08-05  | 1
+| 1001    | 2021-08-06  | 1
+| 1001    | 2021-08-07  | 1
+| 1001    | 2021-08-10  | 2
+| 1001    | 2021-08-12  | 2
+
+
+2.4 先对id,flag进行分组，然后组内取dt最大值和最小值，然后相减，最后差值+ 1，得到连续天数
+
+select
+    id,
+    flag,
+    datadiff(max(dt),min(dt)) + 1 days
+from
+    t3
+group by id,flag;t4
+
+
+2.5 对id进行分组，取连续登录最大天数
+
+select
+	id,
+	max(days) days
+from t4
+group by id;
+
+
+最终SQL：
+select
+	id,
+	max(days) days
+from 
+    (select
+    id,
+    flag,
+    datadiff(max(dt),min(dt)) + 1 days
+from
+    (select
+    id,
+    dt,
+    sum(if(dtDiff>2,1,0)) over(partition by id order by dt) flag
+from
+    (select
+    id,
+    dt,
+    datadiff(dt,lagDt) dtDiff
+from
+    t1)t2)t3
+group by id,flag)t4
+group by id;
+
+
+条件要变，
+断两天：>3 即sum(if(dtDiff>3,1,0))
+断三天：>4 即sum(if(dtDiff>4,1,0))
+
+
+HiveOnSpark ： bug
+	datediff over 并且 在子查询中 ===> NullPoint异常
+
+	解决方案：
+		1.换MR引擎
+		2.将时间字段由string类型改为Date类型
+			即建表的时候使用Date类型

@@ -1,0 +1,86 @@
+hive-on-spark
+
+
+Hive引擎包括：默认MR、tez、spark
+
+Hive on Spark：Hive既作为存储元数据又负责SQL的解析优化，语法是HQL语法，执行引擎变成了Spark，Spark负责采用RDD执行。
+
+Spark on Hive : Hive只作为存储元数据，Spark负责SQL解析优化，语法是Spark SQL语法，Spark负责采用RDD执行。
+
+
+在Hive所在节点部署Spark
+
+1、下载
+https://archive.apache.org/dist/spark/spark-2.4.5/
+
+2、上传并解压
+tar -zxvf spark-2.4.5-bin-hadoop2.7.tgz
+
+3、配置SPARK_HOME环境变量
+vim ~/.bashrc 
+添加如下内容：
+export SPARK_HOME=/opt/module/spark-2.4.5-bin-hadoop2.7
+export PATH=$PATH:$SPARK_HOME/bin
+
+使其生效：source ~/.bashrc 
+
+4、在hive的conf目录下创建spark配置文件
+vim spark-defaults.conf
+添加如下内容（在执行任务时，会根据如下参数执行）：
+spark.master                             yarn
+spark.eventLog.enabled                   true
+spark.eventLog.dir                       hdfs://hadoop1:8020/spark-history
+spark.executor.memory                    1g
+spark.driver.memory                      1g
+
+在hdfs创建如下路径，用于存储历史日志
+hdfs dfs -mkdir /spark-history
+
+5、向hdfs上传spark纯净版jar包
+说明：
+1）直接使用会和安装的Hive3.1.2出现兼容性问题。所以采用Spark纯净版jar包，不包含hadoop和hive相关依赖，避免冲突
+2）Hive任务最终由spark来执行，spark任务资源分配由Yarn来调度，该任务有可能被分配到集群的任何一个节点。所以需要将spark的依赖上传到HDFS集群路径，这样集群中任何一个节点都能获取到
+
+上传并解压spark-2.4.5-bin-without-hadoop.tgz
+tar -zxvf spark-2.4.5-bin-without-hadoop.tgz
+
+上传spark纯净版jar包到hdfs
+hdfs dfs -mkdir /spark-jars
+hdfs dfs -put spark-2.4.5-bin-without-hadoop/jars/* /spark-jars
+
+
+6、修改hive-site.xml文件
+vim hive/conf/hive-site.xml
+
+添加如下内容：
+<!--Spark依赖位置（注意：端口号8020必须和namenode的端口号一致）-->
+  <property>
+      <name>spark.yarn.jars</name>
+      <value>hdfs://hadoop1:8020/spark-jars/*.jar</value>
+  </property>
+
+  <!--Hive执行引擎-->
+  <property>
+    <name>hive.execution.engine</name>
+    <value>spark</value>
+  </property>
+  <!--Hive和Spark连接超时时间-->
+  <property>
+    <name>hive.spark.client.connect.timeout</name>
+    <value>10000ms</value>
+  </property>
+注意：hive.spark.client.connect.timeout的默认值是1000ms，如果执行hive的insert语句时，抛如下异常，可以调大该参数到10000ms
+
+FAILED: SemanticException Failed to get a spark session: org.apache.hadoop.hive.ql.metadata.HiveException: Failed to create Spark client for Spark session d9e0224c-3d14-4bf4-95bc-ee3ec56df48e
+
+
+7、修改spark-env.sh 文件
+cd /opt/module/spark-2.4.5-bin-hadoop2.7/conf
+mv spark-env.sh.template spark-env.sh
+vim spark-env.sh
+
+然后添加如下：
+export SPARK_DIST_CLASSPATH=$(/opt/module/hadoop/bin/hadoop classpath)
+
+
+
