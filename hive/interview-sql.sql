@@ -272,8 +272,13 @@ Q：（腾讯）登录日志，计算每个人连续登录的最大天数？
 1001   			7
 1002   			9
 
-create table tx(id string, dt string) row format 
+建表：
+create table tx(id string, dt string) row format delimited fields terminated by '\t';
+加载数据：
+load data local inpath '/opt/module/data/tx.txt' into table tx;
 
+查询数据：
+select * from tx;
 
 思路1： 等差数列（等差相同）
 
@@ -475,11 +480,29 @@ select
 from
     tx;t1
 
+ id			dt		  lagdt
+1001	2021-08-01	1970-01-01
+1001	2021-08-02	2021-08-01
+1001	2021-08-03	2021-08-02
+1001	2021-08-05	2021-08-03
+1001	2021-08-06	2021-08-05
+1001	2021-08-07	2021-08-06
+1001	2021-08-10	2021-08-07
+1001	2021-08-12	2021-08-10
+1002	2021-08-01	1970-01-01
+1002	2021-08-02	2021-08-01
+1002	2021-08-03	2021-08-02
+1002	2021-08-07	2021-08-03
+1002	2021-08-09	2021-08-07
+1002	2021-08-11	2021-08-09
+1002	2021-08-13	2021-08-11
+1002	2021-08-15	2021-08-13
+
 2.2 将当前行日期减去下移的日期
 select
     id,
     dt,
-    datadiff(dt,lagDt) dtDiff
+    datediff(dt,lagDt) dtDiff
 from
     t1;t2
 
@@ -523,7 +546,7 @@ from
 select
     id,
     flag,
-    datadiff(max(dt),min(dt)) + 1 days
+    datediff(max(dt),min(dt)) days
 from
     t3
 group by id,flag;t4
@@ -533,20 +556,21 @@ group by id,flag;t4
 
 select
 	id,
-	max(days) days
-from t4
+	max(days)+1 as days
+from 
+    t4
 group by id;
 
 
 最终SQL：
 select
-	id,
-	max(days) days
-from 
+    id,
+    max(days)+1 as days
+from
     (select
     id,
     flag,
-    datadiff(max(dt),min(dt)) + 1 days
+    datediff(max(dt),min(dt)) days
 from
     (select
     id,
@@ -556,9 +580,14 @@ from
     (select
     id,
     dt,
-    datadiff(dt,lagDt) dtDiff
+    datediff(dt,lagDt) dtDiff
 from
-    t1)t2)t3
+    (select
+    id,
+    dt,
+    lag(dt,1,'1970-01-01') over(partition by id order by dt) lagDt
+from
+    tx2)t1)t2)t3
 group by id,flag)t4
 group by id;
 
@@ -575,3 +604,18 @@ HiveOnSpark ： bug
 		1.换MR引擎
 		2.将时间字段由string类型改为Date类型
 			即建表的时候使用Date类型
+
+
+days+1 days: 出现如下异常
+Wrong arguments '1': No matching method for class org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPDTIPlus with (int, interval_day_time)
+
+解决方案：
+	1. days+1
+	2. days+1 as days
+
+注意：hive的客户端执行SQL语句时，SQL语句里不能存在 tab键，必须用4个空格键代替
+原因：在Linux系统中tab键的功能是代码补全。
+
+
+
+

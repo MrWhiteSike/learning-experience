@@ -11,15 +11,15 @@ Spark on Hive : Hive只作为存储元数据，Spark负责SQL解析优化，语�
 在Hive所在节点部署Spark
 
 1、下载
-https://archive.apache.org/dist/spark/spark-2.4.5/
+https://archive.apache.org/dist/spark/spark-3.0.0/
 
 2、上传并解压
-tar -zxvf spark-2.4.5-bin-hadoop2.7.tgz
+tar -zxvf spark-3.0.0-bin-hadoop3.2.tgz
 
 3、配置SPARK_HOME环境变量
 vim ~/.bashrc 
 添加如下内容：
-export SPARK_HOME=/opt/module/spark-2.4.5-bin-hadoop2.7
+export SPARK_HOME=/opt/module/spark-3.0.0-bin-hadoop3.2
 export PATH=$PATH:$SPARK_HOME/bin
 
 使其生效：source ~/.bashrc 
@@ -28,25 +28,21 @@ export PATH=$PATH:$SPARK_HOME/bin
 vim spark-defaults.conf
 添加如下内容（在执行任务时，会根据如下参数执行）：
 spark.master                             yarn
-spark.eventLog.enabled                   true
-spark.eventLog.dir                       hdfs://hadoop1:8020/spark-history
 spark.executor.memory                    1g
 spark.driver.memory                      1g
 
-在hdfs创建如下路径，用于存储历史日志
-hdfs dfs -mkdir /spark-history
 
 5、向hdfs上传spark纯净版jar包
 说明：
 1）直接使用会和安装的Hive3.1.2出现兼容性问题。所以采用Spark纯净版jar包，不包含hadoop和hive相关依赖，避免冲突
 2）Hive任务最终由spark来执行，spark任务资源分配由Yarn来调度，该任务有可能被分配到集群的任何一个节点。所以需要将spark的依赖上传到HDFS集群路径，这样集群中任何一个节点都能获取到
 
-上传并解压spark-2.4.5-bin-without-hadoop.tgz
-tar -zxvf spark-2.4.5-bin-without-hadoop.tgz
+上传并解压spark-3.0.0-bin-without-hadoop.tgz
+tar -zxvf spark-3.0.0-bin-without-hadoop.tgz
 
 上传spark纯净版jar包到hdfs
 hdfs dfs -mkdir /spark-jars
-hdfs dfs -put spark-2.4.5-bin-without-hadoop/jars/* /spark-jars
+hdfs dfs -put spark-3.0.0-bin-without-hadoop/jars/* /spark-jars
 
 
 6、修改hive-site.xml文件
@@ -74,13 +70,106 @@ vim hive/conf/hive-site.xml
 FAILED: SemanticException Failed to get a spark session: org.apache.hadoop.hive.ql.metadata.HiveException: Failed to create Spark client for Spark session d9e0224c-3d14-4bf4-95bc-ee3ec56df48e
 
 
-7、修改spark-env.sh 文件
-cd /opt/module/spark-2.4.5-bin-hadoop2.7/conf
+7、修改spark-env.sh 文件，然后分发到其他节点
+cd /opt/module/spark-3.0.0-bin-hadoop3.2/conf
 mv spark-env.sh.template spark-env.sh
 vim spark-env.sh
 
 然后添加如下：
 export SPARK_DIST_CLASSPATH=$(/opt/module/hadoop/bin/hadoop classpath)
 
+scp spark-env.sh hadoop2:/opt/module/spark-3.0.0-bin-hadoop3.2/conf
+scp spark-env.sh hadoop3:/opt/module/spark-3.0.0-bin-hadoop3.2/conf
 
 
+问题1：
+hive-on-spark报错：org.apache.hadoop.hive.ql.parse.SemanticException:Failed to get a spark session
+参考文档：
+https://blog.csdn.net/niuyang0066/article/details/122050157
+
+
+
+Hive源码编译，兼容spark3.0.0 以及 hadoop3.1.4：
+使用hive3.1.2和spark3.0.0配置hive on spark的时候，发现官方下载的hive3.1.2和spark3.0.0不兼容，hive3.1.2对应的版本是spark2.3.0，而spark3.0.0对应的hadoop版本是hadoop2.6或hadoop2.7。
+所以，如果想要使用高版本的hive和hadoop，我们要重新编译hive，兼容spark3.0.0。
+参考文档：
+https://blog.csdn.net/weixin_52918377/article/details/117123969
+
+编译步骤：
+1.下载hive-3.1.2-src.tar.gz
+下载地址：https://archive.apache.org/dist/hive/hive-3.1.2/
+
+2.本地解压hive-3.1.2-src.tar.gz
+使用IDEA打开hive-3.1.2-src
+修改pom.xml文件为如下：
+<guava.version>27.0-jre</guava.version>
+<spark.version>3.0.0</spark.version>
+<scala.binary.version>2.12</scala.binary.version>
+<scala.version>2.12.10</scala.version>
+
+3、根据 参考文档 中的内容修改相应的java文件
+
+4、压缩hive-3.1.2-src上传到Linux的/opt/resource目录下
+tar -zcf hive-3.1.2-src.tar ./hive-3.1.2-src
+
+5、解压编译
+tar -zxvf hive-3.1.2-src.tar
+cd /opt/resource
+mvn clean package -Pdist -DskipTests -Dmaven.javadoc.skip=true
+
+编译成功后
+在/opt/resource/packaging/target/ 中就会生成我们重新编译好的hive-3.1.2-src.tar.gz
+
+6、重新部署安装hive
+
+7、需要将spark jars目录下的一些spark相关的jar包拷贝到hive lib目录下
+cd /opt/module/spark-3.0.0-bin-hadoop3.2
+
+cp py4j-0.10.9.jar pyrolite-4.30.jar RoaringBitmap-0.7.45.jar scala*.jar snappy-java-1.1.7.5.jar spark-core_2.12-3.0.0.jar spark-kvstore_2.12-3.0.0.jar spark-launcher_2.12-3.0.0.jar spark-network-common_2.12-3.0.0.jar spark-network-shuffle_2.12-3.0.0.jar spark-tags_2.12-3.0.0.jar spark-unsafe_2.12-3.0.0.jar /opt/module/apache-hive-3.1.2-bin/lib/
+
+8、测试
+
+  8.1 启动环境：
+    1.spark集群yarn模式成功搭建
+    2.启动hadoop集群的hdfs ，yarn
+    3.启动hive元数据存储服务MySQL
+
+    启动客户端：
+    bin/hive
+
+  8.2 插入数据测试
+    创建一张表：
+    hive (default)> create table student(id bigint, name string);
+    插入一条数据：
+    hive (default)> insert into table student values(1,'abc');
+    执行结果：
+    hive (default)> insert into table student values(1,'abc');
+    Query ID = root_20220517214157_a976e115-4cbe-46d1-a26b-27878214e920
+    Total jobs = 1
+    Launching Job 1 out of 1
+    In order to change the average load for a reducer (in bytes):
+      set hive.exec.reducers.bytes.per.reducer=<number>
+    In order to limit the maximum number of reducers:
+      set hive.exec.reducers.max=<number>
+    In order to set a constant number of reducers:
+      set mapreduce.job.reduces=<number>
+    Running with YARN Application = application_1652771632964_0004
+    Kill Command = /opt/module/hadoop/bin/yarn application -kill application_1652771632964_0004
+    Hive on Spark Session Web UI URL: http://hadoop3:45607
+
+    Query Hive on Spark job[4] stages: [16, 17]
+    Spark job[4] status = RUNNING
+    --------------------------------------------------------------------------------------
+              STAGES   ATTEMPT        STATUS  TOTAL  COMPLETED  RUNNING  PENDING  FAILED  
+    --------------------------------------------------------------------------------------
+    Stage-16 .......         0      FINISHED      1          1        0        0       0  
+    Stage-17 .......         0      FINISHED      1          1        0        0       0  
+    --------------------------------------------------------------------------------------
+    STAGES: 02/02    [==========================>>] 100%  ELAPSED TIME: 5.12 s     
+    --------------------------------------------------------------------------------------
+    Spark job[4] finished successfully in 5.12 second(s)
+    Loading data to table default.student
+    OK
+    col1  col2
+    Time taken: 31.066 seconds
+    hive (default)> 
