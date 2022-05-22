@@ -1,0 +1,101 @@
+008-dwm
+
+
+UV的需求：
+	知识点：
+	1.状态编程：进行过滤数据，只保留每个mid每天第一次登录的数据
+	2.为状态设置TTL：过了超时时间清空状态，超时时间内更新数据为该状态重新设置TTL
+
+跳出率的需求：
+	知识点：
+	1.提取时间戳生成watermark
+	2.使用Flink CEP 定义匹配规则（至少定义两个匹配事件）
+		1）定义模式序列 ： 
+			a. begin where 定义第一个匹配事件  
+			b. next where定义第二个匹配事件 属于严格近邻 
+			c. within 某个时间（在一个时间窗口内是否有匹配的事件）
+		2）将模式序列作用到流上
+		3）提取匹配上的事件 和 超时事件（侧输出流）
+	3.Union 连接两种事件
+
+
+订单宽表的需求：
+	table_process表中
+	维度表对应的insert和update采用是同一个kafka的topic主题
+	事实表要分主题，insert和update分别输出不同的kafka的topic主题
+
+	第一次启动的时候： 启动顺序是，先启动BaseDBApp，配置表加载成功后，在去启动FlinkCDC去加载全量数据
+	FlinkCDC（全量加载 使用的是 initial ） BaseDBApp OrderWideApp 
+	这个是有顺序限制的，如果要求启动没有顺序限制，如何做？
+	方法1：这个更好，加载进来可以建表
+	在open方法中，通过jdbc去读取一次，将读取的数据写到Map里，
+	processElement在方法中，如果获取的 tableProcess = null ; 需要去map中查询，如果不存在，就是不存在了；如果存在走存在的逻辑
+	方法2：
+	在tableProcess = null 的逻辑中，通过 key 去MySQL中查询一次，到底是否存在，如果不存在，就是不存在了
+
+	知识点：
+		1.将数据转换为JavaBean对象，提取时间戳生成Watermark
+		2.双流join
+			intervalJoin：只支持事件时间
+			原理：streamA join streamB 
+			A流的某条数据（t1） join B流某个时间段的数据(t1-5s,t1+5s)
+			t1 join t1-5s 时：B流中的数据把这部分数据保存到状态，保留时间为5s
+			t1 join t1+5s 时：A流中的t1点数据保存到状态中，保存时间为5s
+			这样就完成了join过程。
+		3. 关联维度信息（跟多个维度进行关联）
+			提取查询Phoenix的工具类
+			1）考虑到工具类的通用性，使用了泛型
+				a.解析resultSet，获取元数据
+				b.根据元数据获取列名和对应值
+				c.列名的下划线和驼峰命名之间的转换
+				d.给泛型对象赋值
+			2）封装一层为维度查询工具类，速度比较慢，需要优化
+				优化1：旁路缓存模式
+					a. 利用Redis连接池的工具类创建连接，减少创建连接的开销
+					b. redis 存什么样的数据： jsonStr
+					c. redis 存储数据类型选择：string 为啥不用 set hash等其他数据类型
+					d. redis key的如何设计： tablename+id
+
+					实现步骤：
+					a. 查询Phoenix之前先查询 Redis，读Redis
+					b. redis 没有数据时，查询Phoenix后，写Redis
+					c. 数据更新时，需要删除redis（或者直接修改redis，这种方式避免redis服务出现，多进程情况下，这个进程删除后，还没来得及修改Phoenix，另外一个进程重新将老数据写回到redis，造成了Hbase是新数据，Redis是旧数据的数据不一致问题）避免数据不一致问题
+				优化2：异步IO
+					a. 维表的查询操作托管给单独的线程池完成，不会因为某个查询造成阻塞，单个并行发送多个请求，提高并发效率，大幅度提高流处理的吞吐量
+					b. 需要三部分
+						1. 实现分发请求的AsyncFunction
+							extends RichAsyncFunction<T, T>：
+							原因：
+								1. 在生命周期函数open中建立数据库连接，需要使用RichFunction
+								2.多个维度表都需要用到这个，需要使用泛型
+								3. 查询维度信息
+									1) 表名获取：通过构造器传参的方式，将表名从外部传进去
+									2) id 获取： 不可能从泛型数据中获取，需要通过抽象方法，抽象类的方式解决。让调用者自己去实现重新方法，就可以确定泛型的具体类型，进而得到id
+									3) 补充维度信息：数据要补充到泛型上，而且每张表补充的字段都不一样，需要抽象方法来解决。
+
+						2. 获取数据库交互的结果并发送给ResultFuture的回调函数
+							resultFuture.complete(Collections.singletonList(input));
+
+						3. 将异步IO操作应用于Datastream, 作为DataStream的一次转换操作
+							AsyncDataStream.unorderedWait ：不排序等待，谁返回早，谁输出； 适合没有顺序的场景
+							AsyncDataStream.orderedWait ：排序等待，按照请求的顺序，输出结果；适合有顺序的场景。
+							速度对比：
+							unorderedWait > orderedWait > 同步
+				3. 访问Phoenix的时候，先访问zk，zk的超时时间设置为60s，这里的超时时间至少为60s
+				4. 多张表关联时，关联一张表后的数据流，再去关联下一张表，依次类推，然后关联到最后一张表。
+					注意：关联表时，有些表也是有顺序的，必须先关联某张表后，才能去关联其他的表。
+
+支付宽表的需求：
+	知识点：
+		1.读取kafka 主题数据，将数据转换为JavaBean对象，提取时间戳生成Watermark
+		2.双流join		
+
+
+
+
+
+
+
+
+
+

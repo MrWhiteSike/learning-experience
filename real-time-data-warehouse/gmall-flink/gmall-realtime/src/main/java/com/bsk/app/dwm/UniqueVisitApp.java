@@ -20,7 +20,8 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
 import java.text.SimpleDateFormat;
 
-
+// 数据流： web/app（客户端） -> nginx（负载均衡，反向代理） -> springboot服务 -> kafka(ods) -> FlinkApp -> kafka(DWD) ->   FlinkApp     -> kafka(DWM)
+// 程 序：  MockDB.jar ->      nginx  ->            GmallLoggerApplication -> Kafka(zk) -> BaseLogApp -> kafka(zk) -> UniqueVisitApp -> kafka(zk)
 public class UniqueVisitApp {
     public static void main(String[] args) throws Exception {
         // 1.获取执行环境

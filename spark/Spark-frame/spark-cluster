@@ -73,7 +73,7 @@ yarn-client。Driver程序运行在客户端，适用于交互、调试，希望
 yarn-cluster。Driver程序运行在由RM启动的 AppMaster中，适用于生产环境
 二者的主要区别：Driver在哪里
 
-1、关闭 Standalon 模式下对应的服务；开启 hdfs、yarn服务
+1、关闭 Standalone 模式下对应的服务；开启 hdfs、yarn服务
 2、修改 yarn-site.xml 配置
 在 $HADOOP_HOME/etc/hadoop/yarn-site.xml 中增加，分发到集群，重启 yarn 服务
 # vim /opt/module/hadoop/etc/hadoop/yarn-site.xml 
@@ -123,7 +123,7 @@ client模式测试
 spark-submit --master yarn \
 --deploy-mode client \
 --class org.apache.spark.examples.SparkPi \
-$SPARK_HOME/examples/jars/spark-examples_2.12-3.1.2.jar 2000
+$SPARK_HOME/examples/jars/spark-examples_2.12-3.0.0.jar 2000
 在提取App节点上可以看见：SparkSubmit、YarnCoarseGrainedExecutorBackend
 在集群的其他节点上可以看见：YarnCoarseGrainedExecutorBackend
 在提取App节点上可以看见：程序计算的结果（即可以看见计算返回的结果）
@@ -133,7 +133,7 @@ cluster模式测试
 spark-submit --master yarn \
 --deploy-mode cluster \
 --class org.apache.spark.examples.SparkPi \
-$SPARK_HOME/examples/jars/spark-examples_2.12-3.1.2.jar 2000
+$SPARK_HOME/examples/jars/spark-examples_2.12-3.0.0.jar 2000
 
 在提取App节点上可以看见：SparkSubmit
 在集群的其他节点上可以看见：YarnCoarseGrainedExecutorBackend、ApplicationMaster(Driver运行在此)

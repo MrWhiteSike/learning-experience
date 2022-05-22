@@ -148,7 +148,7 @@ hadoop官网地址：https://www.apache.org/dyn/closer.cgi/hadoop/common/hadoop-
 	mr-jobhistory-daemon.sh start historyserver
 
 9、验证是否正确启动
-	通过命令jps可以查看各个节点所启动的进程。如果已经正确启动，则在Master节点上可以看到NameNode、ResourceManager、SecondrryNameNode和JobHistoryServer以及DataNode和NodeManager进程
+	通过命令jps可以查看各个节点所启动的进程。如果已经正确启动，则在Master节点上可以看到NameNode、ResourceManager、SecondryNameNode和JobHistoryServer以及DataNode和NodeManager进程
 	在Slave节点可以看到DataNode和NodeManager进程
 	缺少任一进程都表示出错。另外还需要在Master节点上通过命令“hdfs dfsadmin -report”查看数据节点是否正常启动，如果屏幕信息中的“Live datanodes”不为 0 ，则说明集群启动成功。
 	也可以在Linux系统的浏览器中输入地址“http://hadoop1的ip:9870/”，通过 Web 页面看到查看名称节点和数据节点的状态。如果不成功，可以通过启动日志排查原因。

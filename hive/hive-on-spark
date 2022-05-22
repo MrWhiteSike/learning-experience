@@ -97,7 +97,7 @@ https://blog.csdn.net/weixin_52918377/article/details/117123969
 
 编译步骤：
 1.下载hive-3.1.2-src.tar.gz
-下载地址：https://archive.apache.org/dist/hive/hive-3.1.2/
+下载地址：https://archive.apache.org/dist/hive/hive-3.1.2/hive-3.1.2-src.tar.gz
 
 2.本地解压hive-3.1.2-src.tar.gz
 使用IDEA打开hive-3.1.2-src

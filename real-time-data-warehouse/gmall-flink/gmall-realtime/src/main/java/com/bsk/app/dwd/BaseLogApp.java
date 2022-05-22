@@ -17,8 +17,8 @@ import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
 
-import java.text.SimpleDateFormat;
-
+// 数据流： web/app（客户端） -> nginx（负载均衡，反向代理） -> springboot服务  -> kafka(ods) -> FlinkApp -> kafka(DWD)
+// 程 序：  MockDB.jar -> nginx(代理的是来自不同服务器的请求) -> GmallLoggerApplication -> Kafka(zk) -> BaseLogApp -> kafka(zk)
 public class BaseLogApp {
     public static void main(String[] args) throws Exception {
         // 1. 获取执行环境

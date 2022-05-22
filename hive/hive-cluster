@@ -113,7 +113,7 @@ bin/beeline -u jdbc:hive2://hadoop1:10000 -n root
 
 
 问题1：hive启动报错
-com.google.common.base.Preconditions.checkArgument(ZLjava/lang/String;Ljava/lang/Object;)V
+com.google.common.base.Preconditions.checkArgument(ZLjava/lang/String;Ljava/lang/Object;)
 	at org.apache.hadoop.conf.Configuration.set(Configuration.java:1357)
 	at org.apache.hadoop.conf.Configuration.set(Configuration.java:1338)
 	at org.apache.hadoop.mapred.JobConf.setJar(JobConf.java:518)
@@ -166,7 +166,7 @@ com.ctc.wstx.exc.WstxParsingException: Illegal character entity: expansion chara
 
 
 
-问题3：Error: Could not open client transport with JDBC Uri: jdbc:hive2://hadoop1:10000/test: Failed to open new session: java.lang.RuntimeException: org.apache.hadoop.ipc.RemoteException(org.apache.hadoop.security.authorize.AuthorizationException): User: root is not allowed to impersonate anonymous (state=08S01,code=0)
+问题3：Error: Could not open client transport with JDBC Uri: jdbc:hive2://hadoop1:10000/default: Failed to open new session: java.lang.RuntimeException: org.apache.hadoop.ipc.RemoteException(org.apache.hadoop.security.authorize.AuthorizationException): User: root is not allowed to impersonate anonymous (state=08S01,code=0)
 
 参考：https://blog.csdn.net/wuleidaren/article/details/106395543
 
