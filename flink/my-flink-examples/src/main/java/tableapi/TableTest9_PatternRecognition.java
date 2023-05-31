@@ -64,11 +64,6 @@ public class TableTest9_PatternRecognition {
         注意：目前，MATCH_RECOGNIZE子句只能应用于追加表。此外，它还总是生成一个追加表。
 
 
-
-
-
-
-
          */
     }
 }
