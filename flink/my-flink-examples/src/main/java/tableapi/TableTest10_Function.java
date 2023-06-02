@@ -5,6 +5,9 @@ public class TableTest10_Function {
         /*
         Functions 函数
 
+
+        一、内置函数
+
         Flink Table API和SQL允许用户使用函数进行数据转换。
 
         函数分类
@@ -442,8 +445,804 @@ public class TableTest10_Function {
         列函数可以用于所有需要列字段的地方，例如select、groupBy、orderBy、UDF等。
 
 
+        二、用户自定义函数
+        用户定义函数（UDF）是调用频繁使用的逻辑或自定义逻辑的扩展点，这些逻辑不能在查询中以其他方式表达。
+        用户定义的函数可以用JVM语言（如Java或Scala）或Python实现。实现者可以在UDF中使用任意的第三方库。
+        本页将重点介绍基于JVM的语言，请参阅PyFlink文档以了解有关用Python编写通用和矢量化UDF的详细信息。
+
+        目前，Flink区分以下几种函数：
+        * 标量函数将标量值映射到新的标量值。
+        * 表函数将标量值映射到新行。
+        * 聚合函数将多行的标量值映射到新的标量值。
+        * 表聚合函数将多行的标量值映射到新行。
+        * 异步表函数是用于执行查找的表源的特殊函数。
+
+        下面的示例演示了如何创建一个简单的标量函数，以及如何在表API和SQL中调用该函数。
+        对于SQL查询，函数必须始终以名称注册。对于表API，函数可以注册或直接内联使用。
+
+        示例：
+        import org.apache.flink.table.api.*;
+        import org.apache.flink.table.functions.ScalarFunction;
+        import static org.apache.flink.table.api.Expressions.*;
+
+        // define function logic
+        public static class SubstringFunction extends ScalarFunction {
+          public String eval(String s, Integer begin, Integer end) {
+            return s.substring(begin, end);
+          }
+        }
+
+        TableEnvironment env = TableEnvironment.create(...);
+
+        // call function "inline" without registration in Table API
+        env.from("MyTable").select(call(SubstringFunction.class, $("myField"), 5, 12));
+
+        // register function
+        env.createTemporarySystemFunction("SubstringFunction", SubstringFunction.class);
+
+        // call registered function in Table API
+        env.from("MyTable").select(call("SubstringFunction", $("myField"), 5, 12));
+
+        // call registered function in SQL
+        env.sqlQuery("SELECT SubstringFunction(myField, 5, 12) FROM MyTable");
 
 
+
+
+        对于交互式会话，也可以在使用或注册函数之前对其进行参数化。在这种情况下，可以使用函数实例而不是函数类作为临时函数。
+        它要求参数是可序列化的，以便将函数实例传送到集群。
+        示例：
+        // call function "inline" without registration in Table API
+        env.from("MyTable").select(call(new SubstringFunction(true), $("myField"), 5, 12));
+
+        // register function
+        env.createTemporarySystemFunction("SubstringFunction", new SubstringFunction(true));
+
+
+        您可以使用star*表达式作为函数调用的一个参数，在表API中充当通配符，表中的所有列都将传递给相应位置的函数。
+        示例：
+        import org.apache.flink.table.api.*;
+        import org.apache.flink.table.functions.ScalarFunction;
+        import static org.apache.flink.table.api.Expressions.*;
+
+        public static class MyConcatFunction extends ScalarFunction {
+          public String eval(@DataTypeHint(inputGroup = InputGroup.ANY) Object... fields) {
+            return Arrays.stream(fields)
+                .map(Object::toString)
+                .collect(Collectors.joining(","));
+          }
+        }
+
+        TableEnvironment env = TableEnvironment.create(...);
+
+        // call function with $("*"), if MyTable has 3 fields (a, b, c),
+        // all of them will be passed to MyConcatFunction.
+        env.from("MyTable").select(call(MyConcatFunction.class, $("*")));
+
+        // it's equal to call function with explicitly selecting all columns.
+        env.from("MyTable").select(call(MyConcatFunction.class, $("a"), $("b"), $("c")));
+
+
+        Implementation Guide 实施指南
+        与函数的类型无关，所有用户定义的函数都遵循一些基本的实现原则。
+
+        1. Function Class 创建函数类
+        实现类必须从一个可用的基类（例如org.apache.flink.table.functions.ScalarFunction）扩展。
+        类必须声明为公共的，而不是抽象的，并且应该是全局可访问的。因此，不允许使用非静态的内部类或匿名类。
+        为了将用户定义的函数存储在持久目录中，类必须具有默认构造函数，并且必须在运行时可实例化。
+        只有当函数不是有状态的（即仅包含瞬态和静态字段）时，才能持久化表API中的匿名函数。
+
+        2. Evaluation Methods 重写计算方法
+        基类提供了一组可以重写的方法，如open（）、close（）或isDeterministic（）。
+        但是，除了那些声明的方法之外，应用于每个传入记录的主要运行时逻辑必须通过专门的计算方法来实现。
+        根据函数类型的不同，诸如eval（）、accumulate（）或retract（）之类的求值方法在运行时由代码生成的运算符调用。
+
+        这些方法必须声明为公共方法，并采用一组定义良好的参数。
+        应用常规JVM方法调用语义。因此，可以：
+        * 实现重载方法，例如eval（Integer）和eval（LocalDateTime），
+        * 使用var参数，例如eval（Integer…），
+        * 使用对象继承，例如同时采用LocalDateTime和Integer的eval（object），
+        * 以及上面的组合，例如采用各种参数的eval（Object…）。
+
+        如果您打算在Scala中实现函数，请在变量参数的情况下添加Scala.annotation.varargs注释。
+        此外，建议使用装箱的基础类型（例如java.lang.Integer而不是Int）来支持NULL。
+
+        示例：eval 方法可以重载
+        import org.apache.flink.table.functions.ScalarFunction;
+
+        // function with overloaded evaluation methods
+        public static class SumFunction extends ScalarFunction {
+
+          public Integer eval(Integer a, Integer b) {
+            return a + b;
+          }
+
+          public Integer eval(String a, String b) {
+            return Integer.valueOf(a) + Integer.valueOf(b);
+          }
+
+          public Integer eval(Double... d) {
+            double result = 0;
+            for (double value : d)
+              result += value;
+            return (int) result;
+          }
+        }
+
+
+        Type Inference 类型推断
+        表生态系统（类似于SQL标准）是一个强类型API。因此，函数参数和返回类型都必须映射到数据类型。
+
+        从逻辑角度来看，规划者需要有关预期类型、精度和规模的信息。从JVM的角度来看，规划者需要有关在调用用户定义函数时如何将内部数据结构表示为JVM对象的信息。
+
+        用于验证输入自变量和导出函数的参数和结果的数据类型的逻辑在术语类型推理下进行了总结。
+
+        Flink的用户定义函数实现了自动类型推断提取，该提取通过反射从函数的类及其评估方法中派生数据类型。
+        如果这种隐式反射提取方法不成功，则可以通过使用@DataTypeHint和@FunctionHint注释受影响的参数、类或方法来支持提取过程。
+
+
+        如果需要更高级的类型推理逻辑，实现者可以在每个用户定义的函数中显式重写getTypeInference（）方法。
+        但是，建议使用注释方法，因为它将自定义类型推理逻辑保持在受影响的位置附近，并返回到其余实现的默认行为。
+
+
+        Automatic Type Inference 自动类型推断
+        自动类型推理检查函数的类和求值方法，以派生函数的参数和结果的数据类型@DataTypeHint和@FunctionHint注释支持自动提取。
+        对于可以隐式映射到数据类型的类的完整列表，
+
+        @DataTypeHint
+        在许多场景中，需要支持函数的参数和返回类型的自动内联提取
+        以下示例显示了如何使用数据类型提示。
+
+        示例：
+        import org.apache.flink.table.annotation.DataTypeHint;
+        import org.apache.flink.table.annotation.InputGroup;
+        import org.apache.flink.table.functions.ScalarFunction;
+        import org.apache.flink.types.Row;
+
+        // function with overloaded evaluation methods
+        public static class OverloadedFunction extends ScalarFunction {
+
+          // no hint required
+          public Long eval(long a, long b) {
+            return a + b;
+          }
+
+          // define the precision and scale of a decimal
+          public @DataTypeHint("DECIMAL(12, 3)") BigDecimal eval(double a, double b) {
+            return BigDecimal.valueOf(a + b);
+          }
+
+          // define a nested data type
+          @DataTypeHint("ROW<s STRING, t TIMESTAMP_LTZ(3)>")
+          public Row eval(int i) {
+            return Row.of(String.valueOf(i), Instant.ofEpochSecond(i));
+          }
+
+          // allow wildcard input and customly serialized output
+          @DataTypeHint(value = "RAW", bridgedTo = ByteBuffer.class)
+          public ByteBuffer eval(@DataTypeHint(inputGroup = InputGroup.ANY) Object o) {
+            return MyUtils.serializeToByteBuffer(o);
+          }
+        }
+
+
+
+        @FunctionHint
+        在某些场景中，希望一种eval方法同时处理多个不同的数据类型。此外，在某些场景中，重载的eval方法有一个通用的结果类型，应该只声明一次。
+        @FunctionHint注释可以提供从参数数据类型到结果数据类型的映射。它允许注释输入、累加器和结果数据类型的整个函数类或求值方法。
+        一个或多个注释可以在类的顶部声明，也可以为重载函数签名的每个求值方法单独声明。所有提示参数都是可选的。
+        如果未定义参数，则使用默认的基于反射的提取。在函数类顶部定义的提示参数由所有求值方法继承。
+
+        示例：
+        import org.apache.flink.table.annotation.DataTypeHint;
+        import org.apache.flink.table.annotation.FunctionHint;
+        import org.apache.flink.table.functions.TableFunction;
+        import org.apache.flink.types.Row;
+
+        // function with overloaded evaluation methods
+        // but globally defined output type
+        @FunctionHint(output = @DataTypeHint("ROW<s STRING, i INT>"))
+        public static class OverloadedFunction extends TableFunction<Row> {
+
+          public void eval(int a, int b) {
+            collect(Row.of("Sum", a + b));
+          }
+
+          // overloading of arguments is still possible
+          public void eval() {
+            collect(Row.of("Empty args", -1));
+          }
+        }
+
+        // decouples the type inference from evaluation methods,
+        // the type inference is entirely determined by the function hints
+        @FunctionHint(
+          input = {@DataTypeHint("INT"), @DataTypeHint("INT")},
+          output = @DataTypeHint("INT")
+        )
+        @FunctionHint(
+          input = {@DataTypeHint("BIGINT"), @DataTypeHint("BIGINT")},
+          output = @DataTypeHint("BIGINT")
+        )
+        @FunctionHint(
+          input = {},
+          output = @DataTypeHint("BOOLEAN")
+        )
+        public static class OverloadedFunction extends TableFunction<Object> {
+
+          // an implementer just needs to make sure that a method exists
+          // that can be called by the JVM
+          public void eval(Object... o) {
+            if (o.length == 0) {
+              collect(false);
+            }
+            collect(o[0]);
+          }
+        }
+
+
+        Custom Type Inference 自定义类型推断
+        对于大多数场景，@DataTypeHint和@FunctionHint应该足以为用户定义的函数建模。
+        但是，通过重写getTypeInference（）中定义的自动类型推理，实现者可以创建行为类似于内置系统函数的任意函数。
+        下面用Java实现的示例说明了自定义类型推理逻辑的潜力。它使用字符串文字参数来确定函数的结果类型。该
+        函数接受两个字符串参数：第一个参数表示要解析的字符串，第二个参数表示目标类型。
+
+
+        import org.apache.flink.table.api.DataTypes;
+        import org.apache.flink.table.catalog.DataTypeFactory;
+        import org.apache.flink.table.functions.ScalarFunction;
+        import org.apache.flink.table.types.inference.TypeInference;
+        import org.apache.flink.types.Row;
+
+        public static class LiteralFunction extends ScalarFunction {
+          public Object eval(String s, String type) {
+            switch (type) {
+              case "INT":
+                return Integer.valueOf(s);
+              case "DOUBLE":
+                return Double.valueOf(s);
+              case "STRING":
+              default:
+                return s;
+            }
+          }
+
+          // the automatic, reflection-based type inference is disabled and
+          // replaced by the following logic
+          @Override
+          public TypeInference getTypeInference(DataTypeFactory typeFactory) {
+            return TypeInference.newBuilder()
+              // specify typed arguments
+              // parameters will be casted implicitly to those types if necessary
+              .typedArguments(DataTypes.STRING(), DataTypes.STRING())
+              // specify a strategy for the result data type of the function
+              .outputTypeStrategy(callContext -> {
+                if (!callContext.isArgumentLiteral(1) || callContext.isArgumentNull(1)) {
+                  throw callContext.newValidationError("Literal expected for second argument.");
+                }
+                // return a data type based on a literal
+                final String literal = callContext.getArgumentValue(1, String.class).orElse("STRING");
+                switch (literal) {
+                  case "INT":
+                    return Optional.of(DataTypes.INT().notNull());
+                  case "DOUBLE":
+                    return Optional.of(DataTypes.DOUBLE().notNull());
+                  case "STRING":
+                  default:
+                    return Optional.of(DataTypes.STRING());
+                }
+              })
+              .build();
+          }
+        }
+
+
+        决定
+        每个用户定义的函数类都可以通过重写isDeterministic（）方法来声明是否产生确定性结果。
+        如果该函数不是纯函数（如random（）、date（）或now（）），则该方法必须返回false。默认情况下，isDeterministic（）返回true。
+        此外，isDeterministic（）方法也可能影响运行时行为。运行时实现可以在两个不同的阶段调用：
+            1. During planning (i.e. pre-flight phase)
+                如果使用常量表达式调用函数，或者可以从给定语句派生常量表达式，则会对函数进行常量表达式缩减的预计算，并且可能不再在集群上执行该函数。
+                除非在这种情况下使用isDeterministic（）来禁用常量表达式缩减。
+                例如，在计划期间执行以下对ABS的调用：SELECT ABS（-1）FROM t和SELECT ABS（field）FROM t WHERE field=-1；而SELECT ABS（字段）FROM t不是。
+            2. During runtime (i.e. cluster execution)
+                如果函数是用非常数表达式调用的，或者isDeterministic（）返回false。
+
+
+        Runtime Integration 运行时集成
+        有时，用户定义的函数可能需要获取全局运行时信息，或者在实际工作之前进行一些设置/清理工作。
+        用户定义的函数提供可重写的open（）和close（）方法，并提供与DataStream API的RichFunction中的方法类似的功能。
+        open（）方法在求值方法之前调用一次。最后一次调用求值方法之后的调用close（）方法。
+        open（）方法提供了一个FunctionContext，其中包含有关执行用户定义函数的上下文的信息，例如度量组、分布式缓存文件或全局作业参数。
+
+        Method	                                    Description
+        getMetricGroup()	                        此并行子任务的metric组。
+        getCachedFile(name)	                        分布式缓存文件的本地临时文件副本。
+        getJobParameter(name, defaultValue)	        与给定键关联的全局作业参数值。
+        getExternalResourceInfos(resourceName)	    返回一组与给定密钥关联的外部资源信息。
+
+
+        注意：根据执行函数的上下文，并非上述所有方法都可用。例如，在常量表达式缩减过程中，添加metric是一种非运算操作。
+
+        示例：
+        import org.apache.flink.table.api.*;
+        import org.apache.flink.table.functions.FunctionContext;
+        import org.apache.flink.table.functions.ScalarFunction;
+
+        public static class HashCodeFunction extends ScalarFunction {
+
+            private int factor = 0;
+
+            @Override
+            public void open(FunctionContext context) throws Exception {
+                // access the global "hashcode_factor" parameter
+                // "12" would be the default value if the parameter does not exist
+                factor = Integer.parseInt(context.getJobParameter("hashcode_factor", "12"));
+            }
+
+            public int eval(String s) {
+                return s.hashCode() * factor;
+            }
+        }
+
+        TableEnvironment env = TableEnvironment.create(...);
+
+        // add job parameter
+        env.getConfig().addJobParameter("hashcode_factor", "31");
+
+        // register the function
+        env.createTemporarySystemFunction("hashCode", HashCodeFunction.class);
+
+        // use the function
+        env.sqlQuery("SELECT myField, hashCode(myField) FROM MyTable");
+
+
+        Scalar Functions 标量函数
+        用户定义的标量函数将零个、一个或多个标量值映射到新的标量值。数据类型部分中列出的任何数据类型都可以用作评估方法的参数或返回类型。
+        为了定义标量函数，必须扩展org.apache.flink.table.functions中的基类ScalarFunction，并实现一个或多个名为eval（…）的求值方法。
+
+        示例：
+        import org.apache.flink.table.annotation.InputGroup;
+        import org.apache.flink.table.api.*;
+        import org.apache.flink.table.functions.ScalarFunction;
+        import static org.apache.flink.table.api.Expressions.*;
+
+        public static class HashFunction extends ScalarFunction {
+
+          // take any data type and return INT
+          public int eval(@DataTypeHint(inputGroup = InputGroup.ANY) Object o) {
+            return o.hashCode();
+          }
+        }
+
+        TableEnvironment env = TableEnvironment.create(...);
+
+        // call function "inline" without registration in Table API
+        env.from("MyTable").select(call(HashFunction.class, $("myField")));
+
+        // register function
+        env.createTemporarySystemFunction("HashFunction", HashFunction.class);
+
+        // call registered function in Table API
+        env.from("MyTable").select(call("HashFunction", $("myField")));
+
+        // call registered function in SQL
+        env.sqlQuery("SELECT HashFunction(myField) FROM MyTable");
+
+
+        Table Functions 表函数
+        与用户定义的标量函数类似，用户定义的表函数（UDTF）采用零、一或多个标量值作为输入参数。
+        但是，它可以返回任意数量的行（或结构化类型）作为输出，而不是单个值。返回的记录可能由一个或多个字段组成。
+        如果输出记录仅由单个字段组成，则可以省略结构化记录，并且可以发出标量值，该标量值将由运行时隐式包装成一行。
+
+        为了定义表函数，必须扩展org.apache.flink.table.functions中的基类TableFunction，并实现一个或多个名为eval（…）的求值方法。
+        与其他函数类似，输入和输出数据类型是使用反射自动提取的。这包括用于确定输出数据类型的类的通用参数T。
+        与标量函数不同，求值方法本身不能有返回类型，相反，表函数提供了一个collect（T）方法，该方法可以在每个求值方法中调用，用于发出零、一个或多个记录。
+
+        在表API中，表函数与.joinLateral（…）或.leftOuterJoinLaterial（…）一起使用。
+        joinLaterale运算符（cross）将外部表（运算符左侧的表）中的每一行与表值函数（运算符右侧的表）生成的所有行连接起来。
+        leftOuterJoinLateral运算符将外部表（运算符左侧的表）中的每一行与表值函数（运算符右侧的表）生成的所有行连接起来，并保留表函数返回空表的外部行。
+
+
+        在SQL中，将LATERAL TABLE（＜TableFunction＞）与JOIN一起使用，或者将LEFT JOIN与ON TRUE连接条件一起使用。
+
+        示例：
+        import org.apache.flink.table.annotation.DataTypeHint;
+        import org.apache.flink.table.annotation.FunctionHint;
+        import org.apache.flink.table.api.*;
+        import org.apache.flink.table.functions.TableFunction;
+        import org.apache.flink.types.Row;
+        import static org.apache.flink.table.api.Expressions.*;
+
+        @FunctionHint(output = @DataTypeHint("ROW<word STRING, length INT>"))
+        public static class SplitFunction extends TableFunction<Row> {
+
+          public void eval(String str) {
+            for (String s : str.split(" ")) {
+              // use collect(...) to emit a row
+              collect(Row.of(s, s.length()));
+            }
+          }
+        }
+
+        TableEnvironment env = TableEnvironment.create(...);
+
+        // call function "inline" without registration in Table API
+        env
+          .from("MyTable")
+          .joinLateral(call(SplitFunction.class, $("myField")))
+          .select($("myField"), $("word"), $("length"));
+        env
+          .from("MyTable")
+          .leftOuterJoinLateral(call(SplitFunction.class, $("myField")))
+          .select($("myField"), $("word"), $("length"));
+
+        // rename fields of the function in Table API
+        env
+          .from("MyTable")
+          .leftOuterJoinLateral(call(SplitFunction.class, $("myField")).as("newWord", "newLength"))
+          .select($("myField"), $("newWord"), $("newLength"));
+
+        // register function
+        env.createTemporarySystemFunction("SplitFunction", SplitFunction.class);
+
+        // call registered function in Table API
+        env
+          .from("MyTable")
+          .joinLateral(call("SplitFunction", $("myField")))
+          .select($("myField"), $("word"), $("length"));
+        env
+          .from("MyTable")
+          .leftOuterJoinLateral(call("SplitFunction", $("myField")))
+          .select($("myField"), $("word"), $("length"));
+
+        // call registered function in SQL
+        env.sqlQuery(
+          "SELECT myField, word, length " +
+          "FROM MyTable, LATERAL TABLE(SplitFunction(myField))");
+        env.sqlQuery(
+          "SELECT myField, word, length " +
+          "FROM MyTable " +
+          "LEFT JOIN LATERAL TABLE(SplitFunction(myField)) ON TRUE");
+
+        // rename fields of the function in SQL
+        env.sqlQuery(
+          "SELECT myField, newWord, newLength " +
+          "FROM MyTable " +
+          "LEFT JOIN LATERAL TABLE(SplitFunction(myField)) AS T(newWord, newLength) ON TRUE");
+
+          注意：如果您打算在Scala中实现函数，请不要将表函数作为Scala对象来实现。Scala对象是单一的，会导致并发问题。
+
+
+        Aggregate Functions 聚合函数
+        用户定义的聚合函数（UDAGG）将多行的标量值映射到新的标量值。
+        聚合函数的行为以累加器的概念为中心。累加器是一种中间数据结构，用于存储聚合值，直到计算出最终聚合结果。
+        对于每一组需要聚合的行，运行时将通过调用createAccumulator（）创建一个空的累加器。
+        随后，为每个输入行调用函数的accumulate（…）方法来更新累加器。
+        一旦处理完所有行，就会调用函数的getValue（…）方法来计算并返回最终结果。
+
+        在本例中，我们假设一个表包含有关饮料的数据。该表由三列（id、name和price）和5行组成。
+        我们想找到表中所有饮料的最高价格，即执行max（）聚合。我们需要考虑5行中的每一行。结果是一个单一的数值。
+
+        为了定义聚合函数，必须扩展org.apache.flink.table.functions中的基类AggregateFunction，并实现一个或多个名为accumulate（…）的求值方法。
+        accumulat方法必须公开声明，而不是静态声明。Accumulate方法也可以通过实现多个名为Accumulate的方法来重载。
+
+        默认情况下，使用反射自动提取输入、累加器和输出数据类型。这包括用于确定累加器数据类型的类的一般参数ACC和用于确定累加器数据类型地一般参数T。
+        输入参数派生自一个或多个accumulate（…）方法。
+
+        示例：
+        import org.apache.flink.table.api.*;
+        import org.apache.flink.table.functions.AggregateFunction;
+        import static org.apache.flink.table.api.Expressions.*;
+
+        // mutable accumulator of structured type for the aggregate function
+        public static class WeightedAvgAccumulator {
+          public long sum = 0;
+          public int count = 0;
+        }
+
+        // function that takes (value BIGINT, weight INT), stores intermediate results in a structured
+        // type of WeightedAvgAccumulator, and returns the weighted average as BIGINT
+        public static class WeightedAvg extends AggregateFunction<Long, WeightedAvgAccumulator> {
+
+          @Override
+          public WeightedAvgAccumulator createAccumulator() {
+            return new WeightedAvgAccumulator();
+          }
+
+          @Override
+          public Long getValue(WeightedAvgAccumulator acc) {
+            if (acc.count == 0) {
+              return null;
+            } else {
+              return acc.sum / acc.count;
+            }
+          }
+
+          public void accumulate(WeightedAvgAccumulator acc, Long iValue, Integer iWeight) {
+            acc.sum += iValue * iWeight;
+            acc.count += iWeight;
+          }
+
+          public void retract(WeightedAvgAccumulator acc, Long iValue, Integer iWeight) {
+            acc.sum -= iValue * iWeight;
+            acc.count -= iWeight;
+          }
+
+          public void merge(WeightedAvgAccumulator acc, Iterable<WeightedAvgAccumulator> it) {
+            for (WeightedAvgAccumulator a : it) {
+              acc.count += a.count;
+              acc.sum += a.sum;
+            }
+          }
+
+          public void resetAccumulator(WeightedAvgAccumulator acc) {
+            acc.count = 0;
+            acc.sum = 0L;
+          }
+        }
+
+        TableEnvironment env = TableEnvironment.create(...);
+
+        // call function "inline" without registration in Table API
+        env
+          .from("MyTable")
+          .groupBy($("myField"))
+          .select($("myField"), call(WeightedAvg.class, $("value"), $("weight")));
+
+        // register function
+        env.createTemporarySystemFunction("WeightedAvg", WeightedAvg.class);
+
+        // call registered function in Table API
+        env
+          .from("MyTable")
+          .groupBy($("myField"))
+          .select($("myField"), call("WeightedAvg", $("value"), $("weight")));
+
+        // call registered function in SQL
+        env.sqlQuery(
+          "SELECT myField, WeightedAvg(`value`, weight) FROM MyTable GROUP BY myField"
+        );
+
+        WeightedAvg类的accumulate（…）方法接受三个输入。第一个是累加器，另外两个是用户定义的输入。
+        为了计算加权平均值，累加器需要存储已累积的所有数据的加权和和和计数。
+        在我们的示例中，我们将类WeightedAvgAccumulator定义为累加器。
+        累加器由Flink的检查点机制自动管理，并在失败时进行恢复，以确保精确一次语义。
+
+        Mandatory and Optional Methods 强制性和可选的方法
+        以下方法对于每个AggregateFunction都是强制性的：
+        * createAccumulator()
+        * accumulate(...)
+        * getValue(...)
+
+        此外，还有一些方法可以选择性地实现。虽然其中一些方法允许系统更高效地执行查询，但其他方法对于某些用例是强制性的。
+        例如，如果聚合函数应应用于会话组窗口的上下文中，则merge（…）方法是强制性的（当观察到“连接”两个会话窗口的行时，需要连接它们的累加器）。
+
+
+        AggregateFunction的以下方法是必需的，具体取决于用例：
+        * retract（…） ：对于OVER窗口上的聚合是必需的。
+        * merge（…）：许多 bounded 聚合以及session 窗口和Hop窗口聚合都需要。此外，这种方法也有助于优化。
+                例如，两阶段聚合优化需要所有的AggregateFunction支持合并方法。
+
+        如果聚合函数只能在OVER窗口中应用，则可以通过在getRequirements（）中返回需求FunctionRequirement.OVER_window_only来声明。
+
+        如果累加器需要存储大量数据，org.apache.flink.table.api.dataview.ListView和org.apache.frink.table.api.dataview.MapView
+        提供了在无限制数据场景中利用flink状态后端的高级功能。
+
+        由于其中一些方法是可选的，或者可以重载，因此运行时通过生成的代码调用聚合函数方法。这意味着基类并不总是提供要由具体实现重写的签名。
+        尽管如此，所有提到的方法都必须公开声明，而不是静态的，并且命名与上面提到的要调用的名称完全相同。
+
+
+
+        Table Aggregate Functions 表聚合函数
+        用户定义的表聚合函数（UDTAGG）将多行的标量值映射为零、一或多行（或结构化类型）。
+        返回的记录可能由一个或多个字段组成。如果输出记录仅由单个字段组成，则可以省略结构化记录，并且可以发出标量值，该标量值将由运行时隐式包装成一行。
+
+        与聚合函数类似，表聚合的行为以累加器的概念为中心。累加器是一种中间数据结构，用于存储聚合值，直到计算出最终聚合结果。
+
+        对于每一组需要聚合的行，运行时将通过调用createAccumulator（）创建一个空的累加器。
+        随后，为每个输入行调用函数的accumulate（…）方法来更新累加器。
+        处理完所有行后，将调用函数的emitValue（…）或emitUpdateWithRetract（…）方法来计算并返回最终结果。
+
+        在本例中，我们假设一个表包含有关饮料的数据。该表由三列（id、name和price）和5行组成。
+        我们想在表中找到所有饮料的2个最高价格，即执行TOP2（）表聚合。我们需要考虑5行中的每一行。结果是一个包含前两个值的表。
+
+
+        为了定义表聚合函数，必须扩展org.apache.flink.table.functions中的基类TableAggregateFunction，
+        并实现一个或多个名为accumulate（…）的求值方法。accumulat方法必须公开声明，而不是静态声明。
+        Accumulate方法也可以通过实现多个名为Accumulate的方法来重载。
+
+
+        默认情况下，使用反射自动提取输入、累加器和输出数据类型。
+        这包括用于确定累加器数据类型的类的一般参数ACC和用于确定累加器数据类型地一般参数T。输入参数派生自一个或多个accumulate（…）方法。
+
+        示例：
+        import org.apache.flink.api.java.tuple.Tuple2;
+        import org.apache.flink.table.api.*;
+        import org.apache.flink.table.functions.TableAggregateFunction;
+        import org.apache.flink.util.Collector;
+        import static org.apache.flink.table.api.Expressions.*;
+
+        // mutable accumulator of structured type for the aggregate function
+        public static class Top2Accumulator {
+          public Integer first;
+          public Integer second;
+        }
+
+        // function that takes (value INT), stores intermediate results in a structured
+        // type of Top2Accumulator, and returns the result as a structured type of Tuple2<Integer, Integer>
+        // for value and rank
+        public static class Top2 extends TableAggregateFunction<Tuple2<Integer, Integer>, Top2Accumulator> {
+
+          @Override
+          public Top2Accumulator createAccumulator() {
+            Top2Accumulator acc = new Top2Accumulator();
+            acc.first = Integer.MIN_VALUE;
+            acc.second = Integer.MIN_VALUE;
+            return acc;
+          }
+
+          public void accumulate(Top2Accumulator acc, Integer value) {
+            if (value > acc.first) {
+              acc.second = acc.first;
+              acc.first = value;
+            } else if (value > acc.second) {
+              acc.second = value;
+            }
+          }
+
+          public void merge(Top2Accumulator acc, Iterable<Top2Accumulator> it) {
+            for (Top2Accumulator otherAcc : it) {
+              accumulate(acc, otherAcc.first);
+              accumulate(acc, otherAcc.second);
+            }
+          }
+
+          public void emitValue(Top2Accumulator acc, Collector<Tuple2<Integer, Integer>> out) {
+            // emit the value and rank
+            if (acc.first != Integer.MIN_VALUE) {
+              out.collect(Tuple2.of(acc.first, 1));
+            }
+            if (acc.second != Integer.MIN_VALUE) {
+              out.collect(Tuple2.of(acc.second, 2));
+            }
+          }
+        }
+
+        TableEnvironment env = TableEnvironment.create(...);
+
+        // call function "inline" without registration in Table API
+        env
+          .from("MyTable")
+          .groupBy($("myField"))
+          .flatAggregate(call(Top2.class, $("value")))
+          .select($("myField"), $("f0"), $("f1"));
+
+        // call function "inline" without registration in Table API
+        // but use an alias for a better naming of Tuple2's fields
+        env
+          .from("MyTable")
+          .groupBy($("myField"))
+          .flatAggregate(call(Top2.class, $("value")).as("value", "rank"))
+          .select($("myField"), $("value"), $("rank"));
+
+        // register function
+        env.createTemporarySystemFunction("Top2", Top2.class);
+
+        // call registered function in Table API
+        env
+          .from("MyTable")
+          .groupBy($("myField"))
+          .flatAggregate(call("Top2", $("value")).as("value", "rank"))
+          .select($("myField"), $("value"), $("rank"));
+
+
+        Top2类的accumulate（…）方法接受两个输入。第一个是累加器，第二个是用户定义的输入。
+        为了计算结果，累加器需要存储已累积的所有数据中的2个最高值。
+        累加器由Flink的检查点机制自动管理，并在失败时进行恢复，以确保只有一次语义。结果值与排名索引一起发布。
+
+
+        以下方法对于每个TableAggregateFunction都是强制性的：
+        * createAccumulator()
+        * accumulate(...)
+        * emitValue(...) or emitUpdateWithRetract(...)
+
+        此外，还有一些方法可以选择性地实现。虽然其中一些方法允许系统更高效地执行查询，但其他方法对于某些用例是强制性的。
+        例如，如果聚合函数应应用于会话组窗口的上下文中，则merge（…）方法是强制性的（当观察到“连接”两个会话窗口的行时，需要连接它们的累加器）。
+
+        public void accumulate(ACC accumulator, [user defined inputs])
+        public void retract(ACC accumulator, [user defined inputs])
+        public void merge(ACC accumulator, java.lang.Iterable<ACC> iterable)
+
+
+
+        TableAggregateFunction的以下方法是必需的，具体取决于用例：
+        * retract（…） ：对于OVER窗口上的聚合是必需的。
+        * merge（…）：许多 bounded 聚合以及 unbounded session 窗口和Hop窗口聚合是必需的。
+        * emitValue(...)：对于有界聚合和窗口聚合是必需的。
+
+        ableAggregateFunction的以下方法用于提高流作业的性能：
+        * emitUpdateWithRetract(...) ：用于发出已在收回模式下更新的值。
+
+        emitValue（…）方法总是根据累加器发出完整的数据。在无限制的场景中，这可能会带来性能问题。以Top N函数为例。
+        emitValue（…）每次都会发出所有N个值。为了提高性能，可以实现emitUpdateWithRetract（…），它以收回模式递增地输出数据。
+        换句话说，一旦有更新，该方法就可以在发送新的更新记录之前收回旧记录。该方法将优先于emitValue（…）方法使用。
+
+        如果表聚合函数只能在OVER窗口中应用，则可以通过在getRequirements（）中返回需求FunctionRequirement.OVER_window_only来声明。
+
+        如果累加器需要存储大量数据，org.apache.flink.table.api.dataview.ListView和org.apache.frink.table.api.dataview.MapView
+        提供了在无限制数据场景中利用flink状态后端的高级功能。
+
+        由于某些方法是可选的或可以重载，因此这些方法由生成的代码调用。基类并不总是提供要由具体实现类重写的签名。
+        尽管如此，所有提到的方法都必须公开声明，而不是静态的，并且命名与上面提到的要调用的名称完全相同。
+
+        public void accumulate(ACC accumulator, [user defined inputs])
+        public void retract(ACC accumulator, [user defined inputs])
+        public void merge(ACC accumulator, java.lang.Iterable<ACC> iterable)
+        public void emitValue(ACC accumulator, org.apache.flink.util.Collector<T> out)
+        public void emitUpdateWithRetract(ACC accumulator, RetractableCollector<T> out)
+
+
+        收回示例：
+        以下示例显示如何使用emitUpdateWithRetract（…）方法仅发出增量更新。为了做到这一点，累加器同时保留旧的和新的前2个值。
+
+        如果Top N中的N很大，则保留旧值和新值可能是低效的。
+        解决这种情况的一种方法是在accumulate方法中仅将输入记录存储在累加器中，然后在emitUpdateWithRetract中执行计算。
+
+
+        import org.apache.flink.api.java.tuple.Tuple2;
+        import org.apache.flink.table.functions.TableAggregateFunction;
+
+        public static class Top2WithRetractAccumulator {
+          public Integer first;
+          public Integer second;
+          public Integer oldFirst;
+          public Integer oldSecond;
+        }
+
+        public static class Top2WithRetract
+            extends TableAggregateFunction<Tuple2<Integer, Integer>, Top2WithRetractAccumulator> {
+
+          @Override
+          public Top2WithRetractAccumulator createAccumulator() {
+            Top2WithRetractAccumulator acc = new Top2WithRetractAccumulator();
+            acc.first = Integer.MIN_VALUE;
+            acc.second = Integer.MIN_VALUE;
+            acc.oldFirst = Integer.MIN_VALUE;
+            acc.oldSecond = Integer.MIN_VALUE;
+            return acc;
+          }
+
+          public void accumulate(Top2WithRetractAccumulator acc, Integer v) {
+            if (v > acc.first) {
+              acc.second = acc.first;
+              acc.first = v;
+            } else if (v > acc.second) {
+              acc.second = v;
+            }
+          }
+
+          public void emitUpdateWithRetract(
+              Top2WithRetractAccumulator acc,
+              RetractableCollector<Tuple2<Integer, Integer>> out) {
+            if (!acc.first.equals(acc.oldFirst)) {
+              // if there is an update, retract the old value then emit a new value
+              if (acc.oldFirst != Integer.MIN_VALUE) {
+                  out.retract(Tuple2.of(acc.oldFirst, 1));
+              }
+              out.collect(Tuple2.of(acc.first, 1));
+              acc.oldFirst = acc.first;
+            }
+            if (!acc.second.equals(acc.oldSecond)) {
+              // if there is an update, retract the old value then emit a new value
+              if (acc.oldSecond != Integer.MIN_VALUE) {
+                  out.retract(Tuple2.of(acc.oldSecond, 2));
+              }
+              out.collect(Tuple2.of(acc.second, 2));
+              acc.oldSecond = acc.second;
+            }
+          }
+        }
 
          */
     }
