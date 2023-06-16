@@ -50,7 +50,7 @@ object HotItemsWithSQL {
     // 事件时间 : 时间列 + watermark 才可以生成 时间属性列
 //    val table = tableEnv.fromDataStream(dataDStream,
 //      Schema.newBuilder()
-//        .columnByExpression("rt", "CAST(`timestamp` AS TIMESTAMP_LTZ(3))")
+//        .columnByExpression("rt", "TO_TIMESTAMP_LTZ(`timestamp`,3)")
 //        .watermark("rt", "rt - INTERVAL '10' SECOND")
 //        .build())
 //    val table = tableEnv.fromDataStream(dataDStream,
