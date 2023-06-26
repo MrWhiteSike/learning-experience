@@ -20,7 +20,7 @@ import org.apache.flink.table.api.bridge.scala.StreamTableEnvironment
  *
  *
  */
-object NetWorkFlowWithTable {
+object NetWorkFlowWithSQL {
 
   def main(args: Array[String]): Unit = {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
@@ -45,27 +45,21 @@ object NetWorkFlowWithTable {
         .build()
     )
 
-//    table.printSchema()
+    table.printSchema()
 
-    val table1 = table
-        .filter($"method" === "GET")
-        .window(Slide over 1.minute every 5.second() on $"ts" as $"w")
-        .groupBy($"w", $"url")
-        .select(
-          $"url",
-          $"w".end as "tend",
-          $"url".count() as "cnt"
-        ).addColumns($"tend".cast(DataTypes.TIMESTAMP_LTZ(3)).as("windowEnd"))
-
-//    table1.printSchema()
-
-    tEnv.createTemporaryView("agg", table1)
+    tEnv.createTemporaryView("network_flow", table)
     val result = tEnv.sqlQuery(
       """
         |select *
         |from (
         |     select url,windowEnd,cnt,row_number() over(partition by windowEnd order by cnt desc) rn
-        |     from agg
+        |     from (
+        |          select url,window_start as windowStart,window_end as windowEnd,count(url) as cnt
+        |          from TABLE(
+        |           HOP(TABLE network_flow, DESCRIPTOR(ts),interval '5' seconds, interval '1' minutes))
+        |           where `method` = 'GET'
+        |           group by url,window_start, window_end
+        |     )
         |)
         |where rn <= 5
         |""".stripMargin)

@@ -27,23 +27,24 @@ case class MyTopNHotPage(topSize: Int) extends KeyedProcessFunction[Long, PageVi
 //    pageViewListState.add(value)
     pageViewMapState.put(value.url, value.count)
 
-    // 正常：没有开启 允许延迟 功能时，
+
+    // 注意定时器可以注册多个
     context.timerService().registerEventTimeTimer(value.windowEnd +1)
 
     // 定义一分钟之后的定时器，用于清除状态
-//    context.timerService().registerEventTimeTimer(value.windowEnd + 60 * 1000L)
+    context.timerService().registerEventTimeTimer(value.windowEnd + 60 * 1000L)
   }
 
   // 定时器触发执行操作
   override def onTimer(timestamp: Long, ctx: KeyedProcessFunction[Long, PageViewCount, String]#OnTimerContext, out: Collector[String]): Unit = {
-    //    // 判断时间戳，如果是1分钟后的定时器，直接清空状态
-    //    if (timestamp == ctx.getCurrentKey + 60 * 1000L){
-    //
-    //    }
+        // 先判断是否到了窗口关闭清理时间，如果是，直接清空状态返回
+        if (timestamp == ctx.getCurrentKey + 60 * 1000L){
+          pageViewMapState.clear()
+          return
+        }
 
     // 定义ListBuffer，copy 所有状态数据用于排序
     val allPageViewCounts: ListBuffer[PageViewCount] = ListBuffer()
-
 
 
     /*
