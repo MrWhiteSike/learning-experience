@@ -70,6 +70,162 @@ object NetWorkFlow {
     late.print("late>>")
     result.print("result>>")
 
+    /**
+     * 输出结果：
+     *
+     * agg>>> PageViewCount(/presentations/,1431829550000,1)
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:25:50.0
+     * Number1: 页面url=/presentations/ 访问量=1
+     *
+     * agg>>> PageViewCount(/presentations/,1431829555000,4)
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:25:55.0
+     * Number1: 页面url=/presentations/ 访问量=4
+     *
+     * agg>>> PageViewCount(/presentations/,1431829560000,6)
+     * agg>>> PageViewCount(/present,1431829560000,2)
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:00.0
+     * Number1: 页面url=/presentations/ 访问量=6
+     * Number2: 页面url=/present 访问量=2
+     *
+     * agg>>> PageViewCount(/presentations/,1431829560000,7)
+     * agg>>> PageViewCount(/presentations/,1431829555000,5)
+     * agg>>> PageViewCount(/presentations/,1431829550000,2)
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:25:50.0
+     * Number1: 页面url=/presentations/ 访问量=2
+     *
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:25:55.0
+     * Number1: 页面url=/presentations/ 访问量=5
+     *
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:00.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/present 访问量=2
+     *
+     * agg>>> PageViewCount(/presentations/,1431829565000,7)
+     * agg>>> PageViewCount(/,1431829565000,1)
+     * agg>>> PageViewCount(/present,1431829565000,2)
+     * agg>>> PageViewCount(/pre,1431829565000,2)
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:05.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/present 访问量=2
+     * Number3: 页面url=/pre 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * agg>>> PageViewCount(/,1431829570000,1)
+     * agg>>> PageViewCount(/presentations/,1431829570000,7)
+     * agg>>> PageViewCount(/present,1431829570000,2)
+     * agg>>> PageViewCount(/pre,1431829570000,4)
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:10.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/pre 访问量=4
+     * Number3: 页面url=/present 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * agg>>> PageViewCount(/,1431829575000,1)
+     * agg>>> PageViewCount(/pre,1431829575000,6)
+     * agg>>> PageViewCount(/present,1431829575000,2)
+     * agg>>> PageViewCount(/presentations/,1431829575000,7)
+     * agg>>> PageViewCount(/,1431829580000,1)
+     * agg>>> PageViewCount(/present,1431829580000,2)
+     * agg>>> PageViewCount(/pre,1431829580000,6)
+     * agg>>> PageViewCount(/presentations/,1431829580000,7)
+     * agg>>> PageViewCount(/,1431829585000,1)
+     * agg>>> PageViewCount(/presentations/,1431829585000,7)
+     * agg>>> PageViewCount(/present,1431829585000,2)
+     * agg>>> PageViewCount(/pre,1431829585000,6)
+     * agg>>> PageViewCount(/present,1431829590000,2)
+     * agg>>> PageViewCount(/pre,1431829590000,6)
+     * agg>>> PageViewCount(/presentations/,1431829590000,7)
+     * agg>>> PageViewCount(/,1431829590000,1)
+     * agg>>> PageViewCount(/present,1431829595000,2)
+     * agg>>> PageViewCount(/pre,1431829595000,6)
+     * agg>>> PageViewCount(/presentations/,1431829595000,7)
+     * agg>>> PageViewCount(/,1431829595000,1)
+     * agg>>> PageViewCount(/present,1431829600000,2)
+     * agg>>> PageViewCount(/presentations/,1431829600000,7)
+     * agg>>> PageViewCount(/pre,1431829600000,6)
+     * agg>>> PageViewCount(/,1431829600000,1)
+     * agg>>> PageViewCount(/pre,1431829605000,6)
+     * agg>>> PageViewCount(/,1431829605000,1)
+     * agg>>> PageViewCount(/presentations/,1431829605000,7)
+     * agg>>> PageViewCount(/present,1431829605000,2)
+     * agg>>> PageViewCount(/pre,1431829610000,6)
+     * agg>>> PageViewCount(/presentations/,1431829610000,5)
+     * agg>>> PageViewCount(/,1431829610000,1)
+     * agg>>> PageViewCount(/present,1431829610000,2)
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:15.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/pre 访问量=6
+     * Number3: 页面url=/present 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:20.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/pre 访问量=6
+     * Number3: 页面url=/present 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:25.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/pre 访问量=6
+     * Number3: 页面url=/present 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:30.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/pre 访问量=6
+     * Number3: 页面url=/present 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:35.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/pre 访问量=6
+     * Number3: 页面url=/present 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:40.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/pre 访问量=6
+     * Number3: 页面url=/present 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:45.0
+     * Number1: 页面url=/presentations/ 访问量=7
+     * Number2: 页面url=/pre 访问量=6
+     * Number3: 页面url=/present 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:26:50.0
+     * Number1: 页面url=/pre 访问量=6
+     * Number2: 页面url=/presentations/ 访问量=5
+     * Number3: 页面url=/present 访问量=2
+     * Number4: 页面url=/ 访问量=1
+     *
+     * late>>> ApacheLogEvent(83.149.9.216,-,1431829490000,GET,/presentations/)
+     * late>>> ApacheLogEvent(83.149.9.216,-,1431829494000,GET,/presentations/)
+     * agg>>> PageViewCount(/presentations/,1431829555000,6)
+     * late>>> ApacheLogEvent(83.149.9.216,-,1431829430000,GET,/presentations/)
+     * result>>> ======================================
+     * 窗口结束时间：2015-05-17 10:25:55.0
+     * Number1: 页面url=/presentations/ 访问量=6
+     *
+     */
+
     env.execute("network flow job")
   }
 
