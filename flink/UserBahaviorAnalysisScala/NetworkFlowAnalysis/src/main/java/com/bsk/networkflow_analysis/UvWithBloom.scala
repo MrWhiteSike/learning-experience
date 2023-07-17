@@ -1,15 +1,15 @@
 package com.bsk.networkflow_analysis
 
 import com.bsk.bean.UserBehavior
-import com.bsk.function.{MyMapper, MyPvCountAgg, MyPvCountWindowResult, MyTotalPvCount, MyUvCountResult}
+import com.bsk.function.{MyTrigger, MyUvCountWithBloom}
 import org.apache.flink.streaming.api.scala.{StreamExecutionEnvironment, _}
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows
 import org.apache.flink.streaming.api.windowing.time.Time
 
 /**
- * 独立用户访问数（对UserID进行去重统计）
+ * 独立用户访问数（对UserID进行去重统计）: 布隆过滤器实现
  */
-object UniqueVisitor {
+object UvWithBloom {
   def main(args: Array[String]): Unit = {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
     env.setParallelism(1)
@@ -22,10 +22,11 @@ object UniqueVisitor {
     }).assignAscendingTimestamps(_.timestamp * 1000L)
 
     val resultStream = dataStream.filter(_.behavior == "pv")
-        // 进行开窗统计聚合，全窗口函数统计每小时的UV值
-        .windowAll(TumblingEventTimeWindows.of(Time.hours(1)))
-        .apply(MyUvCountResult())
-
+        .map(data => ("uv", data.userId))
+        .keyBy(_._1)
+        .window(TumblingEventTimeWindows.of(Time.hours(1)))
+        .trigger(MyTrigger())
+        .process(MyUvCountWithBloom())
     resultStream.print("data")
     env.execute("uv job")
 
