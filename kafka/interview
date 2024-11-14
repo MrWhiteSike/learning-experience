@@ -1,0 +1,286 @@
+1.为什么要使用kafka？
+
+1）缓存和削峰
+上游数据时有突发流量，下游可能扛不住，或者下游没有足够多的机器来保证冗余，kafka在中间可以起到一个缓冲的作用，把消息暂存在kafka中，下游服务就可以按照自己的节奏进行慢慢处理。
+
+2）解耦和扩展性
+项目开始的时候，并不能确定具体需求。消息队列可以作为一个接口层，解耦重要的业务流程。只需要遵守约定，针对数据编程即可获取扩展能力。
+
+
+3）冗余
+可以采用一对多的方式，一个生产者发布消息，可以被多个订阅topic的服务消费到，供多个毫无关联的业务使用。
+
+4）健壮性
+消息队列可以堆积请求，所以消费端业务即使短时间死掉，也不会影响主要业务的正常进行。
+
+5）异步通信
+很多时候，用户不想也不需要立即处理消息。消息队列提供异步处理机制，允许用户把一个消息放入队列，但并不立即处理它。想往队列里放入多少消息就放多少，然后在需要的时候再去处理它们。
+
+
+2. kafka offset的存储
+
+offset：消费消息的偏移量，记录了kafka每个consumer group的下一个需要读取消费位置，保障其消息的消费可靠性。
+
+* 旧版本offset 保存
+kafka 0.8.1.1 以前，offset保存在zk中，存放在/consumers节点下。
+但是由于频繁访问zk，zk需要一个一个节点更新offset，不能批量或分组更新，导致offset更新成了瓶颈。
+
+后续两个过度版本增加了参数 offsets.storage ,该参数可配置为 zookeeper或kafka 
+分别表示offset的保持位置在zk或是broker
+
+默认保留在zk，0.9 版本以后offset就默认保存在broker下。
+
+若配置的kafka，当设置了 dual.commit.enabled 参数时，offset仍然可以提交到zk。
+
+建议尽量使用高版本client，通过链接broker方式消费数据。
+
+
+* 新版本offset保存
+新版本中offset由broker维护，offset信息由一个特殊的topic '_consumer_offsets' 来保存，offset以消息形式发送到该topic并保存在broker中，这样consumer提交offset时，只需连接到broker，不用访问zk，避免了zk节点更新瓶颈。
+
+broker消息保存目录 ，在配置文件server.properties中：
+log.dirs = /usr/local/var/lib/kafka-logs
+
+该目录下默认包含50个以_consumer_offsets开头的目录，用于存放offset：
+_consumer_offsets-0,.....
+
+offset的存放位置决定于groupid的hash值，其获取方式：
+Utils.abs(groupId.hashCode) % numPartitions
+
+
+其中numPartitions由 offsets.topic.num.partitions 参数决定，默认值即50.
+
+以groupid “test-group”为例，计数其存储位置为：__consumer_offsets-12，当其消费全部10条数据后，使用命令查看该目录下消息记录:kafka-console-consumer --bootstrap-server localhost:9092 --topic __consumer_offsets --partition 12 --from-beginning --formatter 'kafka.coordinator.group.GroupMetadataManager$OffsetsMessageFormatter'
+
+
+结果：
+[test-group,test1,0]::OffsetAndMetadata(offset=6, leaderEpoch=Optional[0], metadata=, commitTimestamp=1605601180391, expireTimestamp=None)
+[test-group,test1,2]::OffsetAndMetadata(offset=2, leaderEpoch=Optional[0], metadata=, commitTimestamp=1605601180391, expireTimestamp=None)
+[test-group,test1,1]::OffsetAndMetadata(offset=2, leaderEpoch=Optional[0], metadata=, commitTimestamp=1605601180391, expireTimestamp=None)
+
+
+该数据结构为 groupid-topic-partition作为key，value为OffsetAndMetadata，其中包含了offset信息。offset只记录groupid的消费情况，对于具体consumer是透明的。
+
+那么offset具体被发送给哪个broker保存呢？
+
+offset的存储分区是通过groupid的hash值取得的，那么offset发送的broker就是该分区的leader broker。
+
+每个group的offset都将发送到一个broker，broker中存在一个offset manager 实例负责接收处理offset提交请求，并返回提交操作结果。
+
+重置消费offset：
+sh ./kafka-consumer-groups --reset-offsets --to-offset 59869585 --group API_SERVER_GROUP --bootstrap-server 193.23.3.23:9092 --execute --topic register
+
+注意：相同group有其他的topic正在使用和消费，那么这个group是处于active 状态的，
+处于active状态的group的任何topic的offset是不能够被reset的。
+
+
+3. kafka的数据时放在磁盘上还是内存上，为什么速度会快？
+
+kafka使用的是磁盘存储。
+
+速度快的原因：
+
+1）顺序写入：因为磁盘是机械结构，每次读写都会寻址 -》 写入，其中寻址是一个 机械动作，它是耗时的。所以磁盘 讨厌 随机I/O，喜欢顺序I/O。为了提高读写磁盘的速度，kafka就是使用顺序I/O。
+
+2）Memory Mapped Files(内存映射文件): 64位操作系统中一般可以表示20G的数据文件，
+它的工作原理是直接使用操作系统的Page来实现文件到物理内存的直接映射。完成映射之后你对物理内存的操作会被同步到硬盘上。
+
+3）kafka高效文件存储设计：
+kafka把topic中的一个partition大文件分成多个小文件段，通过多个小文件段，就容易定期清除或删除已经消费完文件，减少磁盘占用。通过索引信息可以快速定位massage和确定response的大小。
+通过index元数据全部映射到memory（内存映射文件），可以避免segment file的IO磁盘操作。
+通过索引文件稀疏存储，可以大幅降低index文件元数据占用空间大小。
+
+
+4）零拷贝技术
+
+
+4. kafka数据怎么保证不丢失？
+
+生产者端，一个消费者端，一个broker端
+
+
+生产者数据的不丢失：
+kafka的ack机制：在kafka发送数据的时候，每次发送消息都会有一个确认反馈机制，确保消息正常的能够被收到，其中状态有 0，1，-1
+
+如果是同步模式：
+ack设置为0，风险很大，如果要严格保证生产端数据不丢失，可以设置为-1
+
+如果是异步模式：
+也会考虑ack的状态，除此之外，异步模式下的有个buffer，通过buffer来进行控制数据的发送，有两个值来进行控制，时间阈值和消息的数量阈值
+如果buffer满了数据还没有发送出去，有个选项是配置是否立即清空buffer。
+可以设置为-1，永久阻塞，也就数据不再生产。
+异步模式下，即使设置为-1，也可能因为程序员的不科学操作，操作数据丢失，比如 kill -9，但这是特别的例外情况。
+
+
+
+消费者数据的不丢失：
+通过offset commit来保证数据的不丢失，kafka自己记录了每次消费的offset数值，下次继续消费的时候，会接着上次的offset进行消费。
+
+而offset的信息在kafka0.8版本之前保存在zookeeper中，在0.8版本之后保存到topic中，即使消费者在运行过程中挂掉了，再次启动的时候会找到offset的值，找到之前消费消息的位置，接着消费，由于offset的信息写入的时候并不是每条消息消费完成后都写入的。所以这种情况有可能会造成重复消费，但是不会丢失消息。
+
+
+唯一例外的情况是，在程序中给原本做不同功能的两个consumer组设置成了相同的grougId，这种情况会导致两个组共享同一份数据，就会产生组A消费partition1，partition2中的消息，组B消费partition3的消息，这样每个组消费的消息都会丢失，都是不完整的。
+为了保证每个组都独享一份消息数据，groupid一定不要重复才行。
+
+
+kafka集群中的broker的数据不丢失：
+每个broker中的partition，我们一般都会设置有replication副本的个数，生产者写入的时候首先根据分发策略（有partition按partition，有key按key，都没有轮询）写入到leader中，follower（副本）再跟leader同步数据，这样有了备份，也可以保证消息数据集的不丢失。
+
+
+
+5. kafka重启是否会导致数据丢失？
+kafka是将数据写到磁盘的，一般数据不会丢失。
+
+在重启kafka过程中，如果有消费者消费消息，那么kafka如果来不及提交offset，可能会造成数据的不准确（丢失或者重复消费）
+
+
+6. kafka宕机了如何解决？
+先考虑业务是否受到影响：
+我们首先考虑的问题应该是所提供的服务是否因为宕机的机器而受到影响，如果服务提供没有问题，如果做好了集群的容灾机制，那么这块就不用担心了。
+
+节点排错与恢复：
+想要恢复集群的节点，主要的步骤就是通过日志分析来查看节点宕机的原因，从而解决，重新恢复节点。
+
+
+7. 为什么kafka不支持读写分离？
+在kafka中，生产者写入消息、消费者读取消息的操作都是与leader副本进行交互的，从而实现的是一种主写主读的生产消费模型。
+
+kafka并不支持 主写从读，因为主写从读有2个很明显的缺点：
+
+1）数据一致性问题：
+数据从主节点转到从节点必然会有一个延时的时间窗口，这个时间窗口会导致主从节点之间的数据不一致。某一时刻，在主节点和从节点中的A数据的值都是X，之后将主节点中的A的值修改为Y，那么在这个变更通知到从节点之前，应用读取从节点中的A数据的值并不为最新的Y，由此便产生了数据不一致问题。
+
+2）延时问题：
+类似redis这种组件，数据从写入主节点到同步从节点中的过程 需要经历
+网络 -》 主节点内存 -》 网络 -》 从节点内存 这几个阶段，整个过程会耗费一定的时间。
+而在kafka中，主从同步会比redis更加耗时，它需要经历
+网络 -》 主节点内存 -》 主节点磁盘 -》 网络 -》 从节点内存 -》 从节点磁盘 这几个阶段。
+对延时敏感的应用而言，主写从读的功能并不太适用。
+
+
+而kafka的主写主读的优点就很多了：
+1）可以简化代码的实现逻辑，减少出错的可能
+2）将负载粒度细化均摊，与主写从读相比，不仅负载效能更好，而且对用户可控。
+3）没有延时的影响
+4）在副本稳定的情况下，不会出现数据不一致的情况
+
+
+8. kafka数据分区和消费者的关系？
+每个分区只能由同一个消费组内的一个消费者来消费，可以由不同的消费组的消费组来消费，同组的消费者则起到并发的效果。
+
+
+9. kafka内部如何保证顺序，结合外部组件如何保证消费者的顺序
+
+kafka只能保证partition内是有序的，但是partition间的有序是没有办法的。
+可以从业务上把需要有序的打到同一个partition中。
+
+
+10. kafka消息数据积压如何处理？
+1）如果是kafka消费能力不足，则可以考虑增加topic的分区数，并排同时提升消费组的消费者数量，分区数 = 消费者数。
+
+2）如果是下游的数据处理不及时：提高每批次拉取的数量，批次拉取数据过少，使处理的数据小于生产的数据，也会造成数据积压。
+
+
+11. kafka单条日志传输大小
+kafka对于消息体的大小默认单条最大值是1M，但是在我们应用场景中，常常会出现一条消息大于1M，如果不对kafka进行配置。则会出现生产者无法将消息推送到kafka或消费者无法去消费kafka里的数据，这时我们就要对kafka进行以下配置：
+
+server.properties
+
+replica.fetch.max.bytes: 1048575     # broker可复制的消息的最大字节数，默认1M
+message.max.bytes: 1000012   # kafka会接收单个消息size的最大限制，默认为1M
+
+注意：message.max.bytes 必须小于等于 replica.fetch.max.bytes, 否则就会导致replica之间数据同步失败。
+
+
+
+
+12. 为什么kafka可以实现高吞吐？单节点kafka的吞吐量也比其他消息队列大，为什么？
+
+kafka是分布式消息系统，需要处理海量的消息，kafka的设计是把所有的消息都写入速度低容量大的磁盘，以此来换取更强的存储能力，但是实际上，使用磁盘并没有带来过多的性能损失。
+
+kafka主要使用了以下几个方式实现了超高的吞吐率，
+1.顺序读写：kafka的消息是不断追加到文件中的，这个特性使kafka可以充分利用磁盘的顺序读写性能，顺序读写不需要磁盘磁头的寻道时间，只需要很少的扇区旋转时间，所以速度远快于随机读写
+2.零拷贝：
+	文件系统的操作流程：例如一个程序要把文件内容发送到网络，这个程序是工作在用户空间，文件和网络socket属于硬件资源，两者之间有一个内核空间在操作系统内部。
+	即 文件 -> 内核空间（buffer cache）-> 用户空间(buffercache) —> 内核空间(buffer cache) -> socket
+	linux kernal 2.2 之后出现了一种叫做 零拷贝 系统调用机制，就是跳过 ‘用户缓冲区’ 的拷贝，建立一个磁盘空间和内存的直接映射，数据不再复制到 用户态缓冲区 系统上下文，切换减少2次，可以提升一倍的性能。
+
+3.文件分段：kafka的队列topic被分为了多个分区partition，每个partition又分为多个段segment，所以一个队列中的消息实际上是保存在N多个片段文件中，通过分段的方式，每次文件操作都是对一个小文件的操作，非常轻便，同时也增加了并行处理能力。
+
+4.批量发送：kafka允许进行批量发送消息，先将消息缓存在内存中，然后一次请求批量发送出去，比如可以指定缓存的消息达到某个量的时候就发出去，或者缓存了固定的时间后就发送出去，比如每100条发送一次、每5秒发送一次等，这种策略将大大减少服务端的I/O次数
+
+5.数据压缩：kafka还支持对消息集合进行压缩，Producer可以通过GZIP或Snappy格式对消息集合进行压缩，压缩的好处就是减少传输的数据量，减轻网络传输的压力，Producer压缩之后，在Consumer需要进行解压缩，虽然增加了CPU的工作，但是对大数据处理上，瓶颈在网络上而不是CUP，所以这个成本很值得。
+
+
+13. kafka的ISR
+ISR ：In-Sync-Replicas，在kafka里表示目前处于同步状态的那些副本(replica)，kafka规定一条消息只有当ISR中所有的副本都复制成功时，才算成功。
+
+如果副本在ISR中停留了很长时间表明什么？ 如果一个副本在ISR中保留了很长一段时间，那么就表明，跟踪器无法像leader收集数据那样快速地获取数据。
+
+请说明如果首选的副本不在ISR中会发生什么？ 如果首选的副本不在ISR中，控制器将无法将leadership转移到首选的副本。
+
+解释如何减少ISR中的扰动？broker什么时候离开ISR？
+ISR是一组与leaders完全同步的消息副本，也就是说ISR中包含了所有提交的消息。ISR应该总是包含所有的副本，直到出现真正的故障。
+如果一个副本从leader中脱离出来，将会从ISR中删除。
+
+
+
+
+
+14. kafka生产者的数据分发策略有几种？
+1）hash取模计算，在发送数据的时候需要传递key和value，默认根据key的hash
+
+2）粘性分区（2.4 版本以下，是轮询方案）
+当生产者去发送数据时候，一般都是采用批量的发送方案，首先会先随机选择其中一个分区，然后尽可能粘住这个分区，将这一批数据全部交给这一个分区
+老版轮询方案：当生产者去发送数据时候，一般都是采用批量的发送方案，当发送一批数据到broker端后，根据分区的数量，将一批数据切分成多个小的批次，一个批次对应一个分区，然后写入到topic的各个分区上。
+粘性分区好处是，减少中间这个切分的方案，直接将一批全部数据写入给某一个分区即可，同时也会减少了中间ack响应的次数，从而来提升效率
+
+3）指定给某一个分区：在发送数据的时候，可以设置定制的分区编号，来实现。
+
+4）自定义分发策略：
+	创建一个类，实现partitioner接口
+	重写其接口中方法：partition和close 方法
+	将自定义的分区类，配置到生产者的配置对象中
+
+
+15. 当消费者无法及时消费kafka中数据，出现了消息积压，如何解决？
+1）可以增加消费者的数量，最多和topic的分区数相等，并保证在同一个组内
+2）可以调整topic的分区数量，以此来增加更多的消费者
+3）调整消费者的消费机制，提高每批次拉取的数量，让其消费的更快
+
+
+16. kafka中消息的存储和查询的机制
+存储：
+数据的存储都是分布式存储，一个topic的数据被分在了多个分片上，然后最终让每个分区的多个副本来存储，而副本的数据就是存储在kafka设定的数据目录下，在每个副本下，数据都是分文件段的形式来存储，一个文件段主要包含两个文件，一个log文件，一个index文件，index文件存储了log数据文件的索引信息，保证后续的查询更快，每个文件段最多存储1GB数据，达到后，就会滚动形成一个新的文件段，同时文件名称代表了此文件存储消息的起始偏移量信息。
+
+查询：
+当查询某一个topic的时候，也是先从各个副本中确定数据在哪个副本中，然后找到这个副本的对应的文件段，接着查询这个文件段中index文件，找到消息在log文件的物理偏移量位置，最终到log文件中顺序查询到这条消息。
+
+
+
+17. kafka的消息投递保证机制以及如何实现？
+
+kafka支持三种消息投递语义：
+at most once：消息可能会丢，但绝不会重复传递
+at least once：消息绝不会丢，但可能会重复传递
+exactly once：每条消息肯定会被传输一次且仅传输一次，很多时候这是用户想要的。
+
+
+consumer在从broker读取消息后，可以选择commit，该操作会在zookeeper或者topic中，存下consumer在该partition下读取的消息的offset，该consumer下一次在读取该partition时会从下一条开始读取。
+如未commit，下一次读取的开始位置会跟上一次commit之后的开始位置相同。
+
+
+可以将consumer设置为autocommit，即consumer一旦读到数据立即自动commit，如果只讨论这一读取消息的过程，那kafka是确保了Exactly once。
+
+但是在实际使用中，consumer并非读取完数据就结束了，而是要进行进一步的处理，而数据处理和commit的顺序在很大程度上决定了消息从broker到consumer的投递保证语义。
+
+读完消息先commit再处理消息。这种模式下，如果consumer在commit后还没来得及处理消息，就crash了，下次重新开始工作后就无法读到刚刚已提交而未处理的消息，这就对应于At most once
+
+读完消息先处理再commit消费状态（保存offset），这种模式下，如果处理完消息之后commit之前，consumer就crash了，下次重新开始工作时还是会处理刚刚未commit的消息，实际上该消息已经被处理过了，这就对应于At least once。
+
+如果一定要做到Exactly once，就需要协调offset和实际操作的输出。经典的做法是引入两阶段提交，但由于许多输出系统不支持两阶段提交，更为通用的方式是将offset和操作输入存在同一个地方。比如，consumer拿到数据后可能把数据放到hdfs，如果最新的offset和数据本身一起写到hdfs，那就可以保证数据的输出和offset的更新，要么都完成，要么都不完成，间接实现Exactly once。
+
+low level api的offset是由自己去维护的，可以将之存于hdfs中。
+
+总之，kafka默认保证at least once，并且允许通过设置producer异步提交来实现at most once，而exactly once要求与目标存储系统协作，kafka提供的offset可以较为容易地实现这种方式。
+

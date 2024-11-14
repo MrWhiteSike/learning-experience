@@ -1,0 +1,110 @@
+1. Hbase 是怎么写数据的？
+
+client 写入 
+-> 存入MemStore ，一直到MEMStore满
+-> Flush 成一个StoreFile，直至增长到一定阈值
+-> 触发Compact合并操作
+-> 多个StoreFile合并成一个StoreFile,同时进行版本合并和数据删除
+-> 当StoreFiles Compact后，逐步形成越来越大的StoreFile
+-> 单个StoreFile大小超过一定阈值后（默认10G），触发Split操作，把当前Region Split成2个Region
+，旧Region会下线，新Split出的2个子Region会被HMaster分配到相应的HRegionServer上，使得原先1个Region的压力得以分流到2个Region上。
+
+由此过程可知，HBase只是增加数据，没有更新和删除数据，用户的更新和删除都是逻辑层面的，在物理层面，更新只是追加操作，删除只是标记操作。
+
+用户写操作
+
+HBase的读写流程？
+
+读：
+1）HRegionServer保存着meta表以及表数据，要访问表数据，首先Client先去访问ZK，从ZK里面获取meta表所在的位置信息，即找到这个meta表在哪个HRegionServer上保存着。
+2）接着Client通过刚才获取到的HRegionServer的IP来访问Meta表所在的HRegionServer，从而读取到meta，进而获取到Meta表中存放的元数据。
+3）Client通过元数据中存储的信息，访问对应的HRegionServer的Memstore和StoreFile来查询数据
+4）最后HRegionServer把查询到的数据响应给Client。
+
+写：
+1）Client先访问zk，找到Meta表，并获取Meta表元数据
+2）确定当前将要写入的数据所对应的HRegion和HRegionServer服务器
+3）Client向该HRegionServer服务器发起写入数据请求，然后HRegionServer收到请求并响应。
+4）Client先把数据写入到HLog，以防止数据丢失
+5）然后将数据写入到Memstore
+6）如果HLog和Memstore均写入成功，则这条数据写入成功
+7）如果Memstore达到阈值，会把Memstore中的数据flush到StoreFile中
+8）当StoreFile越来越多，会触发Compact合并操作，把过多的StoreFile合并成一个大的StoreFile。
+9）当StoreFile越来越大，Region也会越来越大，达到阈值后，会触发Split操作，将Region一分为二。
+
+
+
+2. rowkey设计原则
+	散列性：散列性能够保证相同相似的rowkey聚合，相异的rowkey分散，有利于查询
+	简短性：rowkey作为key的一部分存储在HFile中，如果为了可读性将rowkey设计的过长，那么将会增加存储成本
+	唯一性：rowkey必须具备明显的区别性
+
+	业务性：假如我的查询条件比较多，而且不是针对列的条件，那么rowkey的设计就应该支持多条件查询。如果我的查询要求是最近插入的数据优先，那么rowkey则可以采用Long.Max-时间戳的方式，这样rowkey就是递减排列的。
+
+
+3.region 如何预建分区？
+预分区的目的是主要是在创建表的时候指定分区数，提前规划表有多个分区，以及每个分区的区间范围，这样在存储的时候rowkey按照分区的区间存储，可以避免region热点问题。
+两种方案：
+	方案1：shell方法
+	方案2：java程序控制
+
+
+4. HRegionServer宕机如何处理？
+1）Zookeeper会监控HRegionServer的上下线情况，当ZK发现某个HRegionServer宕机之后会通知HMaster进行失效备援。
+2）该HRegionServer会停止对外提供服务，就是它所负责的region暂时停止对外提供服务
+3）HMaster会将该HRegionServer所负责的region转移到其他HRegionServer上，并且会对HRegionServer上存在memstore中还未持久化到磁盘中的数据进行恢复。
+4）这个恢复工作是由WAL重播来完成。
+这个过程如下：
+	wal实际上就是一个文件，存在/hbase/WAL/对应的RegionServer路径下。
+	宕机发生时，读取该HRegionServer所对应的路径下的wal文件，然后根据不同的region切分成不同的临时文件recover.edits
+	当region被分配到新的HRegionServer中，HRegionServer读取region时会判断是否存在recover.edits，如果有则进行恢复。
+
+
+5.HBase内部机制是什么？
+Hbase是一个能适应联机业务的数据库系统
+物理存储；hbase的持久化数据是将数据存储在HDFS上。
+存储管理：一个表是划分为很多region的，这些region分布式地存在很多regionserver上，Region内部还可以划分为store，store内部有Memstore和StoreFile。
+版本管理：hbase中的数据更新本质上是不断追加新的版本，通过compact操作来做版本间的文件合并Region的Split
+集群管理：Zookeeper + HMaster + HRegionServer
+
+6. Htable API 有没有线程安全问题
+
+在单线程环境下使用Hbase的htable是没有问题的，但是突然高并发情况下就可能出现问题。
+每一个Htable的实例化过程都要创建一个新的Conf，我们甚至可以认为一个conf对应的是一个Htable的connection，因此如果客户端对于同一个表，每次新new一个configuration对象的话，那么意味着这两个Htable虽然操作的是同一个table，但是建立的是两条链接connection，他们的socket不是共用的，
+在多线程情况下，经常会有new Htable的情况发生，而每一次的new都可能是一个新的connection，而我们知道zk上的链接是有限制的，如果链接达到一定阈值的话，那么新建立的链接很有可能挤掉原先的connection，而导致线程不安全。
+
+hbase的官方建议：Htable不是线程安全的，建议使用同一个HBASEConfiguration实例来创建HTable实例，这样可以共享Zookeeper和socket实例。
+
+
+当然最方便的方法就是使用Htablepool，维持一个线程安全的Map，里面存放的是tablename和其引用的映射，可以认为是一个简单的计数器，当需要new一个Htable实例时，直接从该pool中取，用完放回。
+
+
+7. Hbase中的Memstore是用来做什么的？
+hbase为了保证随机读取的性能，所以hfile里面的rowkey是有序的。
+为了保证写入rowkey的有序性，所以不能将数据立刻写入到hfile里，而是将每个变更操作保存在内存中，也就是Memstore中。
+Memstore能够很方便的支持操作的随机插入，并保证所有的操作在内存中是有序的。
+当Memstore达到一定的量时，会将Memstore里面的数据flush到Hfile里，这样能充分利用hadoop写入大文件的性能优势，提高写入性能。
+
+Memstore是存放在内存中，如果regionserver因为某种原因死了，会导致内存中数据丢失。
+为了保证数据不丢失，hbase将更新操作在写入Memstore之前会写入到write ahead log（WAL）中，wal文件是追加、顺序写入的，wal每个regionserver只有一个，同一个regionserver的所有region写入同一个的wal文件。
+这样当某个regionserver失败时，可以通过wal文件，将所有的操作顺序重新加载到Memstore中。
+
+
+8.如何解决hbase中的热点问题
+
+所谓热点问题，指的是大量的数据写到hbase的某一个或者某几个region中，导致其余的region没有数据，其他region对应的HRegionServer的节点承受了大量的并且请求，此时就出现了热点问题。
+
+解决方案：通过预分区和设计良好的rowkey来解决。
+
+加盐处理（加随机数）：可以在rowkey前面动态添加一些随机数，从而保证数据可以均匀落在不同region中
+	基本保证数据落在不同region
+	将相关性比较强的数据分散到不同的region中，导致查询的效率有一定降低。
+
+hash处理：根据rowkey计算其hash值，在rowkey前面hash计算值即可
+	让相关性比较强的数据可以被放置到同一个region中
+	如果相关数据比较多，依然会导致热点问题。
+
+反转策略：比如说手机号反转，或者时间戳的反转
+	好处：基本保证数据落在不同region
+	弊端：将相关性比较强的数据分散在不同的region中，导致查询的效率有一定降低
+
